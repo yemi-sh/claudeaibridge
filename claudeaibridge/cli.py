@@ -109,7 +109,7 @@ def _cmd_tunnel_status(_args) -> int:
 
     s = tunnel.status()
     print(f"authtoken configured: {s['authtoken_configured']}")
-    print(f"static domain: {s['domain'] or '(none — a random URL is assigned each run)'}")
+    print(f"static domain override: {s['domain'] or '(none — using the account default domain)'}")
     return 0
 
 
@@ -148,8 +148,8 @@ def main() -> None:
     p_tset_token.add_argument("token")
     p_tset_token.set_defaults(func=_cmd_tunnel_set_authtoken)
 
-    p_tset_domain = tunnel_sub.add_parser("set-domain", help="Store a reserved ngrok static domain, for a persistent URL across restarts.")
-    p_tset_domain.add_argument("domain", help="e.g. your-name.ngrok-free.app, reserved in the ngrok dashboard.")
+    p_tset_domain = tunnel_sub.add_parser("set-domain", help="Override the domain to use (default: your account's own assigned domain).")
+    p_tset_domain.add_argument("domain", help="e.g. a custom paid domain. Not needed for the free plan's own auto-assigned domain.")
     p_tset_domain.set_defaults(func=_cmd_tunnel_set_domain)
 
     p_tstatus = tunnel_sub.add_parser("status", help="Show current tunnel configuration.")

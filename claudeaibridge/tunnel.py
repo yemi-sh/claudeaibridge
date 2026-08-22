@@ -1,14 +1,12 @@
 """
 ngrok tunnel — gives the local server a public HTTPS URL claude.ai can reach.
 
-Deliberately does NOT auto-provision a reserved domain via ngrok's
-management API (that needs a separate API key beyond the connect
-authtoken, and reserving infrastructure on the user's behalf without them
-seeing it first is the kind of action this project avoids). Instead: the
-user reserves one free static domain in the ngrok dashboard themselves
-(a couple of clicks), then registers it once via `claudeaibridge tunnel
-set-domain`. Without a domain configured, ngrok still works but hands out
-a fresh random URL each run — fine for a first try, not persistent.
+Every ngrok account (free tier included) is permanently assigned one static
+domain at signup, and the agent binds to it automatically once
+authenticated with just the authtoken — no separate reservation step and no
+separate API key needed. `set_domain`/`get_domain` exist only as a manual
+override, e.g. for someone on a paid plan who wants to point at a different
+domain than their default one.
 """
 
 import os

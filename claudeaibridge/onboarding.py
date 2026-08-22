@@ -1,9 +1,13 @@
 """
 Interactive first-run setup: `claudeaibridge init`.
 
-Walks through the one-time setup a new install needs (ngrok authtoken,
-optionally a persistent domain, at least one registered project), then
-hands off to the same server-starting code path as `claudeaibridge serve`.
+Walks through the one-time setup a new install needs (ngrok authtoken, at
+least one registered project), then hands off to the same server-starting
+code path as `claudeaibridge serve`. The authtoken alone is enough — every
+ngrok account is given one permanent static domain, and the agent binds to
+it automatically once authenticated, so there's no separate domain step
+here. `claudeaibridge tunnel set-domain` still exists for anyone who wants
+to point at a different (e.g. paid custom) domain instead.
 Re-running `init` later is safe — every step shows what's already
 configured and lets you keep it or change it, rather than forcing you
 through the whole thing again.
@@ -56,26 +60,6 @@ def _step_authtoken() -> bool:
     return True
 
 
-def _step_domain() -> None:
-    print("\n--- Persistent URL ---")
-    existing = tunnel.get_domain()
-    if existing:
-        if not _ask_yes_no(f"A static domain is already configured ({existing}). Replace it?", default_yes=False):
-            return
-    print(
-        "Every ngrok account is automatically given one static domain — "
-        "it's already sitting in your dashboard, nothing to create:\n"
-        "  https://dashboard.ngrok.com/domains\n"
-        "(looks like your-name.ngrok-free.app). Using it means the "
-        "connector URL stays the same across restarts, so you don't have "
-        "to re-add it in claude.ai every time."
-    )
-    domain = _ask("Paste it here (leave blank to skip — the URL will then change on every restart)")
-    if domain:
-        tunnel.set_domain(domain)
-        print("Saved.")
-
-
 def _step_projects() -> bool:
     print("\n--- Projects ---")
     existing = registry.list_projects()
@@ -112,7 +96,6 @@ def run() -> int:
 
     if not _step_authtoken():
         return 1
-    _step_domain()
     if not _step_projects():
         print(
             "\nNo projects registered. You need at least one before starting "
