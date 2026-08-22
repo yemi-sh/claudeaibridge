@@ -57,23 +57,20 @@ def _step_authtoken() -> bool:
 
 
 def _step_domain() -> None:
-    print("\n--- Persistent URL (recommended) ---")
+    print("\n--- Persistent URL ---")
     existing = tunnel.get_domain()
     if existing:
         if not _ask_yes_no(f"A static domain is already configured ({existing}). Replace it?", default_yes=False):
             return
     print(
-        "Without a reserved domain, the public URL changes every time you "
-        "restart the server, and you'd need to re-add the connector in "
-        "claude.ai each time. ngrok's free plan includes one static domain — "
-        "reserve one at:\n"
+        "Every ngrok account is automatically given one static domain — "
+        "it's already sitting in your dashboard, nothing to create:\n"
         "  https://dashboard.ngrok.com/domains\n"
-        "(click 'Create Domain'; it'll look like your-name.ngrok-free.app)"
+        "(looks like your-name.ngrok-free.app). Using it means the "
+        "connector URL stays the same across restarts, so you don't have "
+        "to re-add it in claude.ai every time."
     )
-    if not _ask_yes_no("Do you have a reserved domain to use now?", default_yes=True):
-        print("Skipping — you can add one later with: claudeaibridge tunnel set-domain <domain>")
-        return
-    domain = _ask("Paste your reserved domain")
+    domain = _ask("Paste it here (leave blank to skip — the URL will then change on every restart)")
     if domain:
         tunnel.set_domain(domain)
         print("Saved.")
