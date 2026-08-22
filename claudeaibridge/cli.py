@@ -1,5 +1,6 @@
 import argparse
 import sys
+from typing import Optional
 
 from . import registry
 
@@ -32,20 +33,17 @@ def _cmd_list_projects(_args) -> int:
     return 0
 
 
-def _cmd_serve(args) -> int:
+def run_server(host: str, port: int, tunnel_choice: str, base_url: Optional[str], no_auth: bool) -> int:
+    """Shared by `serve` and `init` (init gathers config interactively, then
+    ends by calling straight into this — same code path either way)."""
     from . import server
 
-    if args.transport == "stdio":
-        server.run_stdio()
-        return 0
-
     listener = None
-    base_url = args.base_url
-    if args.tunnel == "ngrok":
+    if tunnel_choice == "ngrok":
         from . import tunnel
 
         try:
-            listener = tunnel.start(args.port)
+            listener = tunnel.start(port)
         except (RuntimeError, ValueError) as e:
             print(f"error: could not start ngrok tunnel: {e}", file=sys.stderr)
             return 1
@@ -53,19 +51,41 @@ def _cmd_serve(args) -> int:
         print(f"ngrok tunnel up: {base_url}")
 
     auth_provider = None
-    if not args.no_auth:
+    if not no_auth:
         from .oauth import ConsentOAuthProvider
 
-        base_url = base_url or f"http://{args.host}:{args.port}"
+        base_url = base_url or f"http://{host}:{port}"
         auth_provider = ConsentOAuthProvider(base_url=base_url, state_dir=registry.config_dir())
-        print(f"OAuth authorize URL base: {base_url}")
+
+    connector_url = f"{(base_url or f'http://{host}:{port}').rstrip('/')}/mcp"
+    print()
+    print("=" * 60)
+    print(f"Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
+    print(f"  {connector_url}")
+    print("=" * 60)
+    print()
 
     try:
-        server.run_http(host=args.host, port=args.port, auth_provider=auth_provider)
+        server.run_http(host=host, port=port, auth_provider=auth_provider)
     finally:
         if listener is not None:
             listener.close()
     return 0
+
+
+def _cmd_serve(args) -> int:
+    if args.transport == "stdio":
+        from . import server
+
+        server.run_stdio()
+        return 0
+    return run_server(args.host, args.port, args.tunnel, args.base_url, args.no_auth)
+
+
+def _cmd_init(_args) -> int:
+    from . import onboarding
+
+    return onboarding.run()
 
 
 def _cmd_tunnel_set_authtoken(args) -> int:
@@ -96,6 +116,9 @@ def _cmd_tunnel_status(_args) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="claudeaibridge")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_init = sub.add_parser("init", help="Interactive first-run setup: ngrok, a project, and start serving.")
+    p_init.set_defaults(func=_cmd_init)
 
     p_add = sub.add_parser("add-project", help="Register a folder as an allowed project.")
     p_add.add_argument("path", help="Path to the project folder.")
