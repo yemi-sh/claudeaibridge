@@ -37,8 +37,15 @@ def _cmd_serve(args) -> int:
 
     if args.transport == "stdio":
         server.run_stdio()
-    else:
-        server.run_http(host=args.host, port=args.port)
+        return 0
+
+    auth_provider = None
+    if not args.no_auth:
+        from .oauth import ConsentOAuthProvider
+
+        base_url = args.base_url or f"http://{args.host}:{args.port}"
+        auth_provider = ConsentOAuthProvider(base_url=base_url, state_dir=registry.config_dir())
+    server.run_http(host=args.host, port=args.port, auth_provider=auth_provider)
     return 0
 
 
@@ -62,6 +69,8 @@ def main() -> None:
     p_serve.add_argument("--transport", choices=["http", "stdio"], default="http")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8420)
+    p_serve.add_argument("--base-url", default=None, help="Public URL this server is reachable at (e.g. the ngrok URL). Defaults to http://<host>:<port>.")
+    p_serve.add_argument("--no-auth", action="store_true", help="Disable OAuth (local testing only — do not use with a public tunnel).")
     p_serve.set_defaults(func=_cmd_serve)
 
     args = parser.parse_args()
