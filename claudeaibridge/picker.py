@@ -14,14 +14,15 @@ questionary's built-in prompt shapes:
     content is above it
 
 Controls:
-  Up/Down (or j/k)  move the cursor (stops at the top/bottom, no wrap)
-  Space             toggle the highlighted folder's checkbox
-  Enter             descend into the highlighted folder, or activate Done
-  type              fuzzy-filter the current folder's subfolders
-  Backspace         erase search text, or (when empty) go up one level
-  Esc               clear search text, or (when empty) go up one level
-                     (finishes, if already at the top)
-  Ctrl-C            cancel — returns nothing selected
+  Up/Down    move the cursor (stops at the top/bottom, no wrap)
+  Space      toggle the highlighted folder's checkbox
+  Enter      descend into the highlighted folder, or activate Done
+  type       fuzzy-filter the current folder's subfolders (any letter,
+             including j/k — those aren't bound to navigation here)
+  Backspace  erase search text (only — never navigates)
+  Esc        clear search text, or (when no search) go up one level
+             (finishes, if already at the top)
+  Ctrl-C     cancel — returns nothing selected
 
 Falls back to plain repeated path prompts when stdin isn't a real
 terminal (piped input, tests, CI) — prompt_toolkit needs a tty to render
@@ -89,8 +90,11 @@ def pick_folders(start_dir: str) -> List[str]:
     def rebuild_entries():
         nonlocal entries, cursor_key, search_query
         entries = _list_subdirs(current)
-        cursor_key = ("done",)
         search_query = ""
+        # Land in the Browse section, not back up at Done/Selected — descending
+        # into a folder should keep you where you're looking, not jump you
+        # away from what you're browsing.
+        cursor_key = ("entry", str(entries[0])) if entries else ("done",)
 
     rebuild_entries()
 
@@ -162,12 +166,15 @@ def pick_folders(start_dir: str) -> List[str]:
             lines.extend(render_row(row, full_path=True))
         return lines
 
-    def render_browse():
-        rows = browse_rows()
+    def render_browse_header():
         lines = [("class:path", f" {current}\n")]
         if search_query:
             lines.append(("class:search", f" /{search_query}\n"))
-        lines.append(("class:section", " — Browse —\n"))
+        return lines
+
+    def render_browse_list():
+        rows = browse_rows()
+        lines = [("class:section", " — Browse —\n")]
         if not entries:
             lines.append(("class:hint", " (no subfolders here)\n"))
         elif search_query and not rows:
@@ -181,19 +188,21 @@ def pick_folders(start_dir: str) -> List[str]:
             ("class:count", f" {len(selected)} folder(s) selected  "),
             (
                 "class:hint",
-                "↑/↓ move · type to search · Space select · "
-                "Enter open/done · Backspace/Esc back · Ctrl-C cancel",
+                "↑/↓ move · type to search · Backspace erase · Space select · "
+                "Enter open/done · Esc back · Ctrl-C cancel",
             ),
         ]
 
     top_control = FormattedTextControl(render_top)
-    browse_control = FormattedTextControl(render_browse)
+    browse_header_control = FormattedTextControl(render_browse_header)
+    browse_list_control = FormattedTextControl(render_browse_list)
     footer_control = FormattedTextControl(render_footer)
 
     layout = Layout(HSplit([
         Window(content=top_control, height=Dimension(max=_TOP_MAX_HEIGHT), always_hide_cursor=True),
         Window(height=1, char="─", style="class:sep"),
-        Window(content=browse_control, height=Dimension(weight=1), always_hide_cursor=True),
+        Window(content=browse_header_control, height=Dimension(min=1, max=2), always_hide_cursor=True),
+        Window(content=browse_list_control, height=Dimension(weight=1), always_hide_cursor=True),
         Window(height=1, char="─", style="class:sep"),
         Window(content=footer_control, height=1),
     ]))
@@ -201,13 +210,11 @@ def pick_folders(start_dir: str) -> List[str]:
     bindings = KeyBindings()
 
     @bindings.add("up")
-    @bindings.add("k")
     def _up(event):
         rows = all_rows()
         set_cursor_to_index(rows, cursor_index(rows) - 1)
 
     @bindings.add("down")
-    @bindings.add("j")
     def _down(event):
         rows = all_rows()
         set_cursor_to_index(rows, cursor_index(rows) + 1)
@@ -235,12 +242,10 @@ def pick_folders(start_dir: str) -> List[str]:
 
     @bindings.add("backspace")
     def _backspace(event):
-        nonlocal current, search_query
+        nonlocal search_query
+        # Strictly search-text editing — going up a level is Esc's job only.
         if search_query:
             search_query = search_query[:-1]
-        elif current.parent != current:
-            current = current.parent
-            rebuild_entries()
 
     @bindings.add("escape")
     def _escape(event):
