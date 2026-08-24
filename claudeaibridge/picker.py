@@ -4,15 +4,18 @@ Interactive folder picker for `claudeaibridge init`.
 A single-screen, checkbox-style browser built directly on prompt_toolkit
 (questionary's underlying library) rather than composing questionary's
 canned prompts — the interaction this needs (mark folders with Space while
-also being able to descend with Enter, on the same screen, across
-directory levels) doesn't match any of questionary's built-in prompt
-shapes.
+also being able to descend with Enter, fuzzy-filter by typing, and see
+everything selected so far pinned at the top, all on one screen) doesn't
+match any of questionary's built-in prompt shapes.
 
 Controls:
   Up/Down (or j/k)  move the cursor
   Space             toggle the highlighted folder's checkbox
   Enter             descend into the highlighted folder, or activate Done
-  Backspace/Esc     go up one level (or finish, at the top)
+  type              fuzzy-filter the current folder's subfolders
+  Backspace         erase search text, or (when empty) go up one level
+  Esc               clear search text, or (when empty) go up one level
+                     (finishes, if already at the top)
   Ctrl-C            cancel — returns nothing selected
 
 Falls back to plain repeated path prompts when stdin isn't a real
@@ -22,26 +25,30 @@ a full-screen UI at all.
 
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 
 _STYLE = Style.from_dict({
     "path": "fg:#61afef bold",
+    "search": "fg:#c678dd",
     "hint": "fg:#5c6370 italic",
     "cursor": "reverse",
     "checked": "fg:#98c379 bold",
     "unchecked": "fg:#5c6370",
     "folder": "fg:#e5c07b",
     "done": "fg:#98c379 bold",
+    "section": "fg:#5c6370 bold",
     "count": "fg:#c678dd",
 })
 
-_DONE = "__done__"
+_CHECK = "✓"
+_EMPTY_BOX = " "
 
 
 def _list_subdirs(path: Path) -> List[Path]:
@@ -52,47 +59,102 @@ def _list_subdirs(path: Path) -> List[Path]:
     return sorted(entries, key=lambda p: p.name.lower())
 
 
+def _fuzzy_match(query: str, text: str) -> bool:
+    """Subsequence match, case-insensitive: every character of `query`
+    appears in `text` in order (not necessarily contiguous)."""
+    it = iter(text.lower())
+    return all(ch in it for ch in query.lower())
+
+
 def pick_folders(start_dir: str) -> List[str]:
     """Full-screen checkbox browser. Returns the selected absolute paths
     (possibly empty, e.g. on Ctrl-C)."""
     current = Path(start_dir).expanduser().resolve()
     selected: set = set()
     cursor = 0
-    entries: List[Path] = []  # rebuilt each time `current` changes
+    entries: List[Path] = []
+    search_query = ""
 
     def rebuild_entries():
-        nonlocal entries, cursor
+        nonlocal entries, cursor, search_query
         entries = _list_subdirs(current)
         cursor = 0
+        search_query = ""
 
     rebuild_entries()
 
-    def row_count() -> int:
-        return 1 + len(entries)  # Done row + folder rows
+    def visible_entries() -> List[Path]:
+        if not search_query:
+            return entries
+        return [d for d in entries if _fuzzy_match(search_query, d.name)]
+
+    def build_rows():
+        rows = [{"kind": "done"}]
+        for p in sorted(selected):
+            rows.append({"kind": "selected", "path": Path(p)})
+        for d in visible_entries():
+            rows.append({"kind": "entry", "path": d})
+        return rows
+
+    def clamp_cursor():
+        nonlocal cursor
+        cursor = max(0, min(cursor, len(build_rows()) - 1))
 
     def render():
-        lines = [("class:path", f" {current}\n"), ("", "\n")]
-        for i in range(row_count()):
+        rows = build_rows()
+        lines = [("class:path", f" {current}\n")]
+        if search_query:
+            lines.append(("class:search", f" /{search_query}\n"))
+        else:
+            lines.append(("", "\n"))
+        lines.append(("", "\n"))
+
+        printed_selected_header = False
+        printed_entries_header = False
+        for i, row in enumerate(rows):
             is_cursor = i == cursor
             prefix = "❯ " if is_cursor else "  "
-            if i == 0:
-                label = f"{prefix}✓ Done — {len(selected)} selected"
+            cursor_marker = [("[SetCursorPosition]", "")] if is_cursor else []
+
+            if row["kind"] == "done":
+                label = f"{prefix}{_CHECK} Done — {len(selected)} selected"
                 style = "class:cursor" if is_cursor else "class:done"
+                lines.extend(cursor_marker)
                 lines.append((style, label + "\n"))
+                continue
+
+            if row["kind"] == "selected" and not printed_selected_header:
+                lines.append(("class:section", " — Selected —\n"))
+                printed_selected_header = True
+            if row["kind"] == "entry" and not printed_entries_header:
+                if printed_selected_header:
+                    lines.append(("", "\n"))
+                lines.append(("class:section", " — Browse —\n"))
+                printed_entries_header = True
+
+            d = row["path"]
+            is_checked = row["kind"] == "selected" or str(d) in selected
+            box = f"[{_CHECK}]" if is_checked else f"[{_EMPTY_BOX}]"
+            box_style = "checked" if is_checked else "unchecked"
+            lines.extend(cursor_marker)
+            if is_cursor:
+                lines.append(("class:cursor", f"{prefix}{box} {d.name}/\n"))
             else:
-                d = entries[i - 1]
-                is_checked = str(d) in selected
-                box = "[x]" if is_checked else "[ ]"
-                box_style = "checked" if is_checked else "unchecked"
-                text = f"{prefix}{box} {d.name}/"
-                if is_cursor:
-                    lines.append(("class:cursor", text + "\n"))
-                else:
-                    lines.append((f"class:{box_style}", f"{prefix}{box} "))
-                    lines.append(("class:folder", d.name + "/\n"))
+                lines.append((f"class:{box_style}", f"{prefix}{box} "))
+                lines.append(("class:folder", d.name + "/\n"))
+
+        if not rows or (len(rows) == 1 and not entries and not search_query):
+            lines.append(("class:hint", " (no subfolders here)\n"))
+        elif search_query and not visible_entries():
+            lines.append(("class:hint", " (no matches)\n"))
+
         lines.append(("", "\n"))
         lines.append(("class:count", f" {len(selected)} folder(s) selected  "))
-        lines.append(("class:hint", "↑/↓ move · Space select · Enter open/done · Backspace/Esc back · Ctrl-C cancel"))
+        lines.append((
+            "class:hint",
+            "↑/↓ move · type to search · Space select · "
+            "Enter open/done · Backspace/Esc back · Ctrl-C cancel",
+        ))
         return lines
 
     control = FormattedTextControl(render)
@@ -105,38 +167,53 @@ def pick_folders(start_dir: str) -> List[str]:
     @bindings.add("k")
     def _up(event):
         nonlocal cursor
-        cursor = (cursor - 1) % row_count()
+        cursor = (cursor - 1) % len(build_rows())
 
     @bindings.add("down")
     @bindings.add("j")
     def _down(event):
         nonlocal cursor
-        cursor = (cursor + 1) % row_count()
+        cursor = (cursor + 1) % len(build_rows())
 
     @bindings.add("space")
     def _toggle(event):
-        if cursor == 0:
+        row = build_rows()[cursor]
+        if row["kind"] == "done":
             return
-        d = str(entries[cursor - 1])
+        d = str(row["path"])
         if d in selected:
             selected.discard(d)
         else:
             selected.add(d)
+        clamp_cursor()
 
     @bindings.add("enter")
     def _activate(event):
         nonlocal current
-        if cursor == 0:
+        row = build_rows()[cursor]
+        if row["kind"] == "done":
             event.app.exit(result=sorted(selected))
             return
-        current = entries[cursor - 1]
+        current = row["path"]
         rebuild_entries()
 
     @bindings.add("backspace")
+    def _backspace(event):
+        nonlocal current, search_query
+        if search_query:
+            search_query = search_query[:-1]
+            clamp_cursor()
+        elif current.parent != current:
+            current = current.parent
+            rebuild_entries()
+
     @bindings.add("escape")
-    def _back(event):
-        nonlocal current
-        if current.parent != current:
+    def _escape(event):
+        nonlocal current, search_query
+        if search_query:
+            search_query = ""
+            clamp_cursor()
+        elif current.parent != current:
             current = current.parent
             rebuild_entries()
         else:
@@ -145,6 +222,13 @@ def pick_folders(start_dir: str) -> List[str]:
     @bindings.add("c-c")
     def _cancel(event):
         event.app.exit(result=[])
+
+    @bindings.add(Keys.Any)
+    def _search_type(event):
+        nonlocal search_query
+        if event.data and event.data.isprintable():
+            search_query += event.data
+            clamp_cursor()
 
     app = Application(layout=layout, key_bindings=bindings, style=_STYLE, full_screen=True)
     result = app.run()
