@@ -43,7 +43,12 @@ from prompt_toolkit.styles import Style
 
 _STYLE = Style.from_dict({
     "path": "fg:#61afef bold",
-    "search": "fg:#c678dd",
+    # Named "searchquery" rather than "search" -- "search" is a style name
+    # prompt_toolkit reserves for its own built-in incremental-search
+    # highlighting (defaults to a yellow background), so reusing it here
+    # just layered our foreground color on top of that inherited yellow
+    # block instead of replacing it.
+    "searchquery": "fg:#c678dd",
     "hint": "fg:#5c6370 italic",
     "cursor": "reverse",
     "checked": "fg:#98c379 bold",
@@ -187,7 +192,7 @@ def pick_folders(start_dir: str) -> List[str]:
     def render_browse_header():
         lines = [("class:path", f" {current}\n")]
         if search_query:
-            lines.append(("class:search", f" /{search_query}\n"))
+            lines.append(("class:searchquery", f" /{search_query}\n"))
         return lines
 
     def render_browse_list():
