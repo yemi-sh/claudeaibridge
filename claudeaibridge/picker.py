@@ -240,6 +240,20 @@ def pick_folders(start_dir: str) -> List[str]:
 
     sync_focus()
 
+    def cursor_valid(rows) -> bool:
+        return any(row_key(r) == cursor_key for r in rows)
+
+    def reconcile_cursor(pre_idx: int) -> None:
+        """Call after any mutation that might remove the row the cursor was
+        on (deselecting from the Selected pane, or search filtering it out
+        of view) — otherwise cursor_key points at a row that no longer
+        exists, nothing claims the terminal's cursor position, and it
+        visually vanishes until the next Up/Down press recomputes it."""
+        rows = all_rows()
+        if rows and not cursor_valid(rows):
+            set_cursor_to_index(rows, pre_idx)
+        sync_focus()
+
     bindings = KeyBindings()
 
     @bindings.add("up")
@@ -256,7 +270,9 @@ def pick_folders(start_dir: str) -> List[str]:
 
     @bindings.add("space")
     def _toggle(event):
-        row = all_rows()[cursor_index(all_rows())]
+        rows = all_rows()
+        idx = cursor_index(rows)
+        row = rows[idx]
         if row["kind"] == "done":
             return
         d = str(row["path"])
@@ -264,6 +280,7 @@ def pick_folders(start_dir: str) -> List[str]:
             selected.discard(d)
         else:
             selected.add(d)
+        reconcile_cursor(idx)
 
     @bindings.add("enter")
     def _activate(event):
@@ -281,13 +298,17 @@ def pick_folders(start_dir: str) -> List[str]:
         nonlocal search_query
         # Strictly search-text editing — going up a level is Esc's job only.
         if search_query:
+            idx = cursor_index(all_rows())
             search_query = search_query[:-1]
+            reconcile_cursor(idx)
 
     @bindings.add("escape")
     def _escape(event):
         nonlocal current, search_query
         if search_query:
+            idx = cursor_index(all_rows())
             search_query = ""
+            reconcile_cursor(idx)
         elif current.parent != current:
             current = current.parent
             rebuild_entries()
@@ -303,7 +324,9 @@ def pick_folders(start_dir: str) -> List[str]:
     def _search_type(event):
         nonlocal search_query
         if event.data and event.data.isprintable():
+            idx = cursor_index(all_rows())
             search_query += event.data
+            reconcile_cursor(idx)
 
     app = Application(layout=layout, key_bindings=bindings, style=_STYLE, full_screen=True)
     result = app.run()
