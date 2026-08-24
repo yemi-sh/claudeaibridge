@@ -13,10 +13,9 @@ configured and lets you keep it or change it, rather than forcing you
 through the whole thing again.
 """
 
-import sys
 from pathlib import Path
 
-from . import registry, tunnel
+from . import picker, registry, tunnel
 
 
 def _ask(prompt: str, default: str = "") -> str:
@@ -70,18 +69,14 @@ def _step_projects() -> bool:
         if not _ask_yes_no("Register another project?", default_yes=False):
             return True
 
-    while True:
-        path = _ask("Path to a project folder claude.ai should be able to work in (leave blank to finish)")
-        if not path:
-            break
+    print("Pick the folder(s) claude.ai should be able to work in.")
+    for path in picker.prompt_for_projects(str(Path.home())):
         try:
             name = registry.add_project(path)
         except (NotADirectoryError, FileNotFoundError) as e:
             print(f"  error: {e}")
             continue
         print(f"  Registered '{name}' -> {registry.get_project_path(name)}")
-        if not _ask_yes_no("Register another?", default_yes=False):
-            break
 
     return bool(registry.list_projects())
 
