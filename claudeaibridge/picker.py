@@ -57,6 +57,7 @@ _STYLE = Style.from_dict({
 
 _CHECK = "✓"
 _TOP_MAX_HEIGHT = 12
+_COMPACT_SELECTED_VISIBLE = 3
 
 
 def _list_subdirs(path: Path) -> List[Path]:
@@ -157,13 +158,30 @@ def pick_folders(start_dir: str) -> List[str]:
             ("class:folder", name + "\n"),
         ]
 
+    def cursor_in_top() -> bool:
+        return cursor_key[0] in ("done", "selected")
+
     def render_top():
         rows = top_rows()
-        lines = []
-        for i, row in enumerate(rows):
-            if row["kind"] == "selected" and (i == 0 or rows[i - 1]["kind"] != "selected"):
-                lines.append(("class:section", " — Selected —\n"))
-            lines.extend(render_row(row, full_path=True))
+        done_row, selected_rows = rows[0], rows[1:]
+
+        # Compact by default (a fixed number of rows, so a big selection
+        # can't shrink the Browse pane) — expands to show the whole list
+        # once the cursor actually moves into this section.
+        if not cursor_in_top() and len(selected_rows) > _COMPACT_SELECTED_VISIBLE:
+            visible = selected_rows[:_COMPACT_SELECTED_VISIBLE]
+            hidden_count = len(selected_rows) - _COMPACT_SELECTED_VISIBLE
+        else:
+            visible = selected_rows
+            hidden_count = 0
+
+        lines = list(render_row(done_row, full_path=True))
+        if visible:
+            lines.append(("class:section", " — Selected —\n"))
+            for row in visible:
+                lines.extend(render_row(row, full_path=True))
+            if hidden_count:
+                lines.append(("class:hint", f"  ...[+{hidden_count} more]\n"))
         return lines
 
     def render_browse_header():
@@ -198,14 +216,29 @@ def pick_folders(start_dir: str) -> List[str]:
     browse_list_control = FormattedTextControl(render_browse_list)
     footer_control = FormattedTextControl(render_footer)
 
+    top_window = Window(content=top_control, height=Dimension(max=_TOP_MAX_HEIGHT), always_hide_cursor=True)
+    browse_header_window = Window(content=browse_header_control, height=Dimension(min=1, max=2), always_hide_cursor=True)
+    browse_list_window = Window(content=browse_list_control, height=Dimension(weight=1), always_hide_cursor=True)
+    footer_window = Window(content=footer_control, height=1, always_hide_cursor=True)
+
     layout = Layout(HSplit([
-        Window(content=top_control, height=Dimension(max=_TOP_MAX_HEIGHT), always_hide_cursor=True),
+        top_window,
         Window(height=1, char="─", style="class:sep"),
-        Window(content=browse_header_control, height=Dimension(min=1, max=2), always_hide_cursor=True),
-        Window(content=browse_list_control, height=Dimension(weight=1), always_hide_cursor=True),
+        browse_header_window,
+        browse_list_window,
         Window(height=1, char="─", style="class:sep"),
-        Window(content=footer_control, height=1),
+        footer_window,
     ]))
+
+    def sync_focus():
+        # Explicitly park focus (and so the terminal's real cursor) on
+        # whichever pane actually holds the cursor — otherwise
+        # prompt_toolkit's default-focused window ends up being the first
+        # one in the layout with nothing claiming the cursor position,
+        # which renders as a stray cursor block sitting on the search field.
+        layout.focus(top_window if cursor_in_top() else browse_list_window)
+
+    sync_focus()
 
     bindings = KeyBindings()
 
@@ -213,11 +246,13 @@ def pick_folders(start_dir: str) -> List[str]:
     def _up(event):
         rows = all_rows()
         set_cursor_to_index(rows, cursor_index(rows) - 1)
+        sync_focus()
 
     @bindings.add("down")
     def _down(event):
         rows = all_rows()
         set_cursor_to_index(rows, cursor_index(rows) + 1)
+        sync_focus()
 
     @bindings.add("space")
     def _toggle(event):
@@ -239,6 +274,7 @@ def pick_folders(start_dir: str) -> List[str]:
             return
         current = row["path"]
         rebuild_entries()
+        sync_focus()
 
     @bindings.add("backspace")
     def _backspace(event):
@@ -255,6 +291,7 @@ def pick_folders(start_dir: str) -> List[str]:
         elif current.parent != current:
             current = current.parent
             rebuild_entries()
+            sync_focus()
         else:
             event.app.exit(result=sorted(selected))
 
