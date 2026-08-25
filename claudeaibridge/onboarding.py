@@ -20,7 +20,7 @@ from pathlib import Path
 import pyfiglet
 import questionary
 
-from . import picker, registry, tunnel
+from . import picker, registry, term_colors as tc, tunnel
 
 # Same palette as picker.py's _STYLE, for a consistent look across the
 # wizard — questionary's own default leaves pointer/highlighted/selected
@@ -107,7 +107,7 @@ def _ask_yes_no(prompt: str, default_yes: bool) -> bool:
 
 def _step_public_url():
     """Returns (use_ngrok: bool, base_url: str | None, no_auth: bool)."""
-    print("\n--- Public URL ---")
+    print(tc.header("\n--- Public URL ---"))
 
     if not sys.stdin.isatty():
         return True, None, False  # non-interactive: default to ngrok
@@ -134,11 +134,13 @@ def _step_public_url():
         raise _Cancelled()
 
     if choice == "own":
-        base_url = _ask("Public URL claude.ai should use to reach this server (e.g. https://your-domain.example)")
-        if base_url:
-            return False, base_url, False
-        print("No URL given — falling back to ngrok.")
-        return True, None, False
+        # No silent fallback to ngrok: this loops until a real URL is given,
+        # or the user Ctrl-C's out entirely (via _ask's own _Cancelled).
+        while True:
+            base_url = _ask("Public URL claude.ai should use to reach this server (e.g. https://your-domain.example)")
+            if base_url:
+                return False, base_url, False
+            print(tc.error("A URL is required for this option."))
 
     if choice == "local":
         return False, None, True
@@ -147,7 +149,7 @@ def _step_public_url():
 
 
 def _step_authtoken() -> bool:
-    print("\n--- ngrok authtoken ---")
+    print(tc.header("\n--- ngrok authtoken ---"))
     existing = tunnel.get_authtoken()
     if existing:
         masked = existing[:4] + "..." + existing[-4:] if len(existing) > 8 else "***"
@@ -156,19 +158,19 @@ def _step_authtoken() -> bool:
     print(
         "claudeaibridge needs an ngrok account to get a public URL for this "
         "machine. Get a free authtoken at:\n"
-        "  https://dashboard.ngrok.com/get-started/your-authtoken"
+        "  " + tc.accent("https://dashboard.ngrok.com/get-started/your-authtoken")
     )
     token = _ask("Paste your ngrok authtoken (leave blank to cancel)")
     if not token:
-        print("No authtoken provided. You can set one later with: claudeaibridge ngrok set-authtoken <token>")
+        print(tc.error("No authtoken provided.") + " You can set one later with: claudeaibridge ngrok set-authtoken <token>")
         return False
     tunnel.set_authtoken(token)
-    print("Saved.")
+    print(tc.success("Saved."))
     return True
 
 
 def _step_projects() -> bool:
-    print("\n--- Projects ---")
+    print(tc.header("\n--- Projects ---"))
     before = set(registry.list_projects())
     if before:
         print("Already registered:")
@@ -182,9 +184,9 @@ def _step_projects() -> bool:
             try:
                 resolved = registry.add_project(path)
             except (NotADirectoryError, FileNotFoundError) as e:
-                print(f"  error: {e}")
+                print(tc.error(f"  error: {e}"))
                 continue
-            print(f"  Registered {resolved}")
+            print(tc.success(f"  Registered {resolved}"))
         return bool(registry.list_projects())
 
     # Always reopens the picker, pre-checked with whatever's already
@@ -193,10 +195,10 @@ def _step_projects() -> bool:
     after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
     for p in sorted(after - before):
         registry.add_project(p)
-        print(f"  Added {p}")
+        print(tc.success(f"  Added {p}"))
     for p in sorted(before - after):
         registry.remove_project(p)
-        print(f"  Removed {p}")
+        print(tc.hint(f"  Removed {p}"))
 
     return bool(registry.list_projects())
 
@@ -219,16 +221,17 @@ def run() -> int:
                 next_cmd = f"claudeaibridge serve --base-url {base_url}"
             else:
                 next_cmd = "claudeaibridge serve --no-auth"
-            print(
-                "\nNo projects registered. You need at least one before starting "
+            print(tc.error(
+                "\nNo projects registered."
+            ) + " You need at least one before starting "
                 f"the server — run `claudeaibridge add-project <path>` and then `{next_cmd}`."
             )
             return 1
     except _Cancelled:
-        print("\nSetup cancelled.")
+        print(tc.hint("\nSetup cancelled."))
         return 130
 
-    print("\n--- Starting server ---")
+    print(tc.header("\n--- Starting server ---"))
     from .cli import run_server
 
     return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)

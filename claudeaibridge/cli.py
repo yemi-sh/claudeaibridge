@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import registry
+from . import term_colors as tc
 
 
 def _cmd_add_project(args) -> int:
@@ -11,65 +12,64 @@ def _cmd_add_project(args) -> int:
         try:
             resolved = registry.add_project(args.path)
         except (NotADirectoryError, FileNotFoundError) as e:
-            print(f"error: {e}", file=sys.stderr)
+            print(tc.error(f"error: {e}"), file=sys.stderr)
             return 1
-        print(f"Registered {resolved}")
+        print(tc.success(f"Registered {resolved}"))
         return 0
 
     from . import picker
 
     selected = picker.prompt_for_projects(str(Path.home()))
     if not selected:
-        print("No folders selected.")
+        print(tc.hint("No folders selected."))
         return 0
     for p in selected:
         try:
             resolved = registry.add_project(p)
-            print(f"Registered {resolved}")
+            print(tc.success(f"Registered {resolved}"))
         except (NotADirectoryError, FileNotFoundError) as e:
-            print(f"error: {e}", file=sys.stderr)
+            print(tc.error(f"error: {e}"), file=sys.stderr)
     return 0
 
 
 def _cmd_edit_project(args) -> int:
     if args.path:
         if registry.remove_project(args.path):
-            print(f"Removed {args.path}")
+            print(tc.success(f"Removed {args.path}"))
             return 0
-        print(f"error: '{args.path}' is not registered.", file=sys.stderr)
+        print(tc.error(f"error: '{args.path}' is not registered."), file=sys.stderr)
         return 1
 
     if not sys.stdin.isatty():
-        print(
+        print(tc.error(
             "Interactive editing needs a real terminal. To remove one project "
-            "directly: claudeaibridge edit-project <path>",
-            file=sys.stderr,
-        )
+            "directly: claudeaibridge edit-project <path>"
+        ), file=sys.stderr)
         return 1
 
     from . import picker
 
     before = set(registry.list_projects())
     if not before:
-        print("No projects registered yet. Use `claudeaibridge add-project` first.")
+        print(tc.hint("No projects registered yet. Use `claudeaibridge add-project` first."))
         return 0
 
     after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
     for p in sorted(after - before):
         registry.add_project(p)
-        print(f"Added {p}")
+        print(tc.success(f"Added {p}"))
     for p in sorted(before - after):
         registry.remove_project(p)
-        print(f"Removed {p}")
+        print(tc.hint(f"Removed {p}"))
     if after == before:
-        print("No changes.")
+        print(tc.hint("No changes."))
     return 0
 
 
 def _cmd_list_projects(_args) -> int:
     projects = registry.list_projects()
     if not projects:
-        print("No projects registered. Add one with: claudeaibridge add-project <path>")
+        print(tc.hint("No projects registered. Add one with: claudeaibridge add-project <path>"))
         return 0
     for path in sorted(projects):
         print(path)
@@ -88,10 +88,10 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
         try:
             listener = tunnel.start(port)
         except (RuntimeError, ValueError) as e:
-            print(f"error: could not start ngrok tunnel: {e}", file=sys.stderr)
+            print(tc.error(f"error: could not start ngrok tunnel: {e}"), file=sys.stderr)
             return 1
         base_url = listener.url()
-        print(f"ngrok tunnel up: {base_url}")
+        print(tc.success(f"ngrok tunnel up: {base_url}"))
 
     auth_provider = None
     if not no_auth:
@@ -102,10 +102,10 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
 
     connector_url = f"{(base_url or f'http://{host}:{port}').rstrip('/')}/mcp"
     print()
-    print("=" * 60)
-    print(f"Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
-    print(f"  {connector_url}")
-    print("=" * 60)
+    print(tc.header("=" * 60))
+    print("Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
+    print(f"  {tc.accent(connector_url)}")
+    print(tc.header("=" * 60))
     print()
     # Explicit flush: stdout is fully buffered (not line-buffered) whenever
     # it isn't a live terminal — piped, redirected to a file, captured by a
@@ -141,7 +141,7 @@ def _cmd_ngrok_set_authtoken(args) -> int:
     from . import tunnel
 
     tunnel.set_authtoken(args.token)
-    print("ngrok authtoken saved.")
+    print(tc.success("ngrok authtoken saved."))
     return 0
 
 
@@ -149,7 +149,7 @@ def _cmd_ngrok_status(_args) -> int:
     from . import tunnel
 
     s = tunnel.status()
-    print(f"authtoken configured: {s['authtoken_configured']}")
+    print(f"authtoken configured: {tc.success(str(s['authtoken_configured'])) if s['authtoken_configured'] else tc.hint('False')}")
     return 0
 
 
@@ -191,7 +191,16 @@ def main() -> None:
     p_nstatus.set_defaults(func=_cmd_ngrok_status)
 
     args = parser.parse_args()
-    sys.exit(args.func(args))
+    try:
+        sys.exit(args.func(args))
+    except KeyboardInterrupt:
+        # Blanket safety net: anything that Ctrl-C's out of a raw input(),
+        # a blocking network call (ngrok, uvicorn), or anywhere else that
+        # isn't already caught closer to the source (questionary/prompt_toolkit
+        # prompts handle their own) should still exit cleanly, not dump a
+        # traceback.
+        print(tc.hint("\nCancelled."))
+        sys.exit(130)
 
 
 if __name__ == "__main__":
