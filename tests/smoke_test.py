@@ -56,9 +56,25 @@ async def main():
                             content="def greet():\n    print('hi')\n",
                             reason="smoke test create")
 
-                await call(client, "file_edit", path="new_file.py",
+                edit_result = await call(client, "file_edit", path="new_file.py",
                             old_content="print('hi')", new_content="print('hello')",
                             reason="smoke test edit")
+
+                # Widget: show_diff should carry a UI resource, degrade to
+                # plain text for non-widget clients, and its structured
+                # content should embed the same diff text file_edit returned.
+                tools = await client.list_tools()
+                sd_tool = next(t for t in tools if t.name == "show_diff")
+                assert sd_tool.meta and "ui" in sd_tool.meta, "show_diff should carry _meta.ui"
+                diff_widget_result = await client.call_tool(
+                    "show_diff", {"diff": edit_result["diff"], "path": "new_file.py"}
+                )
+                assert diff_widget_result.content and diff_widget_result.content[0].text, \
+                    "show_diff should still return plain text content"
+                code_block = diff_widget_result.structured_content["view"]["children"][0]["children"][1]
+                assert code_block["type"] == "Code" and code_block["content"] == edit_result["diff"]
+                print("\n>>> show_diff widget: UI meta present, degrades to text, "
+                      "diff content wired correctly")
 
                 await call(client, "shell_execute", command="cat new_file.py && pwd")
 

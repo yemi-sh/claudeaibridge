@@ -23,6 +23,8 @@ from fastmcp import Context
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from prefab_ui.components import Code, Column, Heading
+
 from . import audit, session
 from .paths import PathEscapesProject, resolve_within
 
@@ -246,6 +248,34 @@ def register(mcp):
             result.pop("_new_content", None)
             audit.log(root, "file_edit", f"FAILED {file_path} — {result.get('error', 'unknown error')}")
         return result
+
+    @mcp.tool(
+        name="show_diff",
+        app=True,
+        annotations={
+            "title": "Show Diff",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
+    async def show_diff(
+        diff: Annotated[str, Field(description="Unified diff text, as returned in file_edit's `diff` field.")],
+        path: Annotated[Optional[str], Field(description="The file path the diff is for, shown as a heading.")] = None,
+    ):
+        """
+        Render a unified diff visually for the user, instead of them reading
+        raw diff text. Call this right after a successful file_edit, passing
+        its `diff` field — in addition to, never instead of, reporting the
+        file_edit result itself. On a host without widget support this has
+        no useful plain-text fallback, so don't rely on it for anything the
+        user needs to see unconditionally.
+        """
+        with Column(gap=8) as view:
+            Heading(path or "Diff")
+            Code(diff, language="diff")
+        return view
 
     @mcp.tool(
         name="file_trash",
