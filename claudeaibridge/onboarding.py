@@ -17,6 +17,7 @@ through the whole thing again.
 import sys
 from pathlib import Path
 
+import pyfiglet
 import questionary
 
 from . import picker, registry, tunnel
@@ -34,8 +35,42 @@ _MENU_STYLE = questionary.Style([
     ("instruction", "fg:#5c6370 italic"),
 ])
 
+# Gradient endpoints for the banner, same blue -> purple sweep as the rest
+# of the wizard's palette (picker.py's path color -> _MENU_STYLE's answer
+# color).
+_GRADIENT_START = (0x61, 0xAF, 0xEF)
+_GRADIENT_END = (0xC6, 0x78, 0xDD)
+
+
+def _print_banner() -> None:
+    art = pyfiglet.figlet_format("claudeaibridge", font="small").rstrip("\n").split("\n")
+    width = max((len(line) for line in art), default=1)
+    colorize = sys.stdout.isatty()
+
+    print()
+    for line in art:
+        if not colorize:
+            print(line)
+            continue
+        out = []
+        for i, ch in enumerate(line):
+            if ch.strip():
+                t = i / max(width - 1, 1)
+                r = round(_GRADIENT_START[0] + (_GRADIENT_END[0] - _GRADIENT_START[0]) * t)
+                g = round(_GRADIENT_START[1] + (_GRADIENT_END[1] - _GRADIENT_START[1]) * t)
+                b = round(_GRADIENT_START[2] + (_GRADIENT_END[2] - _GRADIENT_START[2]) * t)
+                out.append(f"\033[38;2;{r};{g};{b}m{ch}\033[0m")
+            else:
+                out.append(ch)
+        print("".join(out))
+    print("  A coding agent on your machine, driven from claude.ai")
+    print()
+
 
 def _ask(prompt: str, default: str = "") -> str:
+    if sys.stdin.isatty():
+        value = questionary.text(prompt, default=default, style=_MENU_STYLE).ask()
+        return value if value is not None else default
     suffix = f" [{default}]" if default else ""
     try:
         value = input(f"{prompt}{suffix}: ").strip()
@@ -45,6 +80,9 @@ def _ask(prompt: str, default: str = "") -> str:
 
 
 def _ask_yes_no(prompt: str, default_yes: bool) -> bool:
+    if sys.stdin.isatty():
+        value = questionary.confirm(prompt, default=default_yes, style=_MENU_STYLE).ask()
+        return default_yes if value is None else value
     suffix = " [Y/n]" if default_yes else " [y/N]"
     try:
         value = input(f"{prompt}{suffix}: ").strip().lower()
@@ -138,8 +176,7 @@ def _step_projects() -> bool:
 
 
 def run() -> int:
-    print("claudeaibridge setup")
-    print("=====================")
+    _print_banner()
     print(
         "This will let claude.ai read, edit, and run shell commands in "
         "project folders you explicitly choose on this machine."
