@@ -2,6 +2,11 @@
 name = "claudeaibridge"
 version = "0.1.0"
 description = "Run a coding agent on your own machine, driven from claude.ai via a custom MCP connector."
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
 requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=3.0.0",
