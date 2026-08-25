@@ -88,7 +88,7 @@ def _cmd_init(_args) -> int:
     return onboarding.run()
 
 
-def _cmd_tunnel_set_authtoken(args) -> int:
+def _cmd_ngrok_set_authtoken(args) -> int:
     from . import tunnel
 
     tunnel.set_authtoken(args.token)
@@ -96,7 +96,7 @@ def _cmd_tunnel_set_authtoken(args) -> int:
     return 0
 
 
-def _cmd_tunnel_set_domain(args) -> int:
+def _cmd_ngrok_set_domain(args) -> int:
     from . import tunnel
 
     tunnel.set_domain(args.domain)
@@ -104,7 +104,7 @@ def _cmd_tunnel_set_domain(args) -> int:
     return 0
 
 
-def _cmd_tunnel_status(_args) -> int:
+def _cmd_ngrok_status(_args) -> int:
     from . import tunnel
 
     s = tunnel.status()
@@ -138,22 +138,22 @@ def main() -> None:
     p_serve.add_argument("--port", type=int, default=8420)
     p_serve.add_argument("--base-url", default=None, help="Public URL this server is reachable at (e.g. your own domain/tunnel). Overridden automatically when --ngrok is used. Defaults to http://<host>:<port>.")
     p_serve.add_argument("--no-auth", action="store_true", help="Disable OAuth (local testing only — do not use with a public tunnel).")
-    p_serve.add_argument("--ngrok", action="store_true", help="Expose the server publicly via ngrok. Requires 'claudeaibridge tunnel set-authtoken' first. Omit this if you're using your own domain/tunnel via --base-url instead.")
+    p_serve.add_argument("--ngrok", action="store_true", help="Expose the server publicly via ngrok. Requires 'claudeaibridge ngrok set-authtoken' first. Omit this if you're using your own domain/tunnel via --base-url instead.")
     p_serve.set_defaults(func=_cmd_serve)
 
-    p_tunnel = sub.add_parser("tunnel", help="Configure the ngrok tunnel.")
-    tunnel_sub = p_tunnel.add_subparsers(dest="tunnel_command", required=True)
+    p_ngrok = sub.add_parser("ngrok", help="Configure the ngrok tunnel.")
+    ngrok_sub = p_ngrok.add_subparsers(dest="ngrok_command", required=True)
 
-    p_tset_token = tunnel_sub.add_parser("set-authtoken", help="Store your ngrok authtoken.")
-    p_tset_token.add_argument("token")
-    p_tset_token.set_defaults(func=_cmd_tunnel_set_authtoken)
+    p_nset_token = ngrok_sub.add_parser("set-authtoken", help="Store your ngrok authtoken.")
+    p_nset_token.add_argument("token")
+    p_nset_token.set_defaults(func=_cmd_ngrok_set_authtoken)
 
-    p_tset_domain = tunnel_sub.add_parser("set-domain", help="Override the domain to use (default: your account's own assigned domain).")
-    p_tset_domain.add_argument("domain", help="e.g. a custom paid domain. Not needed for the free plan's own auto-assigned domain.")
-    p_tset_domain.set_defaults(func=_cmd_tunnel_set_domain)
+    p_nset_domain = ngrok_sub.add_parser("set-domain", help="Override the domain to use (default: your account's own assigned domain).")
+    p_nset_domain.add_argument("domain", help="e.g. a custom paid domain. Not needed for the free plan's own auto-assigned domain.")
+    p_nset_domain.set_defaults(func=_cmd_ngrok_set_domain)
 
-    p_tstatus = tunnel_sub.add_parser("status", help="Show current tunnel configuration.")
-    p_tstatus.set_defaults(func=_cmd_tunnel_status)
+    p_nstatus = ngrok_sub.add_parser("status", help="Show current tunnel configuration.")
+    p_nstatus.set_defaults(func=_cmd_ngrok_status)
 
     args = parser.parse_args()
     sys.exit(args.func(args))

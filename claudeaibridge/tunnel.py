@@ -71,7 +71,7 @@ def start(local_port: int, authtoken: Optional[str] = None, domain: Optional[str
         raise RuntimeError(
             "No ngrok authtoken configured. Get a free one at "
             "https://dashboard.ngrok.com/get-started/your-authtoken and run: "
-            "claudeaibridge tunnel set-authtoken <token>"
+            "claudeaibridge ngrok set-authtoken <token>"
         )
 
     options = {"authtoken": token}

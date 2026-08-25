@@ -37,7 +37,7 @@ def main() -> int:
         env["XDG_CONFIG_HOME"] = tmp_config
 
         set_token = subprocess.run(
-            [sys.executable, "-m", "claudeaibridge.cli", "tunnel", "set-authtoken", token],
+            [sys.executable, "-m", "claudeaibridge.cli", "ngrok", "set-authtoken", token],
             env=env, capture_output=True, text=True,
         )
         assert set_token.returncode == 0, set_token.stderr

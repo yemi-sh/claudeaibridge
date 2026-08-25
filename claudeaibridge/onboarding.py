@@ -6,7 +6,7 @@ least one registered project), then hands off to the same server-starting
 code path as `claudeaibridge serve`. The authtoken alone is enough — every
 ngrok account is given one permanent static domain, and the agent binds to
 it automatically once authenticated, so there's no separate domain step
-here. `claudeaibridge tunnel set-domain` still exists for anyone who wants
+here. `claudeaibridge ngrok set-domain` still exists for anyone who wants
 to point at a different (e.g. paid custom) domain instead.
 Re-running `init` later is safe — every step shows what's already
 configured and lets you keep it or change it, rather than forcing you
@@ -52,7 +52,7 @@ def _step_authtoken() -> bool:
     )
     token = _ask("Paste your ngrok authtoken (leave blank to cancel)")
     if not token:
-        print("No authtoken provided. You can set one later with: claudeaibridge tunnel set-authtoken <token>")
+        print("No authtoken provided. You can set one later with: claudeaibridge ngrok set-authtoken <token>")
         return False
     tunnel.set_authtoken(token)
     print("Saved.")
