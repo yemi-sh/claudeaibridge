@@ -19,7 +19,9 @@ def _cmd_add_project(args) -> int:
 
     from . import picker
 
-    selected = picker.prompt_for_projects(str(Path.home()))
+    selected = picker.prompt_for_projects(
+        str(Path.home()), instruction="Pick the folder(s) claude.ai should be able to work in."
+    )
     if not selected:
         print(tc.hint("No folders selected."))
         return 0
@@ -54,7 +56,10 @@ def _cmd_edit_project(args) -> int:
         print(tc.hint("No projects registered yet. Use `claudeaibridge add-project` first."))
         return 0
 
-    after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
+    after = set(picker.pick_folders(
+        str(Path.home()), initial_selected=before,
+        instruction="Check/uncheck folders to add or remove them.",
+    ))
     for p in sorted(after - before):
         registry.add_project(p)
         print(tc.success(f"Added {p}"))

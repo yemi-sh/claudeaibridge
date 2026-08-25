@@ -177,10 +177,10 @@ def _step_projects() -> bool:
         for path in sorted(before):
             print(f"  {path}")
 
-    print("Pick the folder(s) claude.ai should be able to work in.")
+    instruction = "Pick the folder(s) claude.ai should be able to work in."
 
     if not sys.stdin.isatty():
-        for path in picker.prompt_for_projects(str(Path.home())):
+        for path in picker.prompt_for_projects(str(Path.home()), instruction=instruction):
             try:
                 resolved = registry.add_project(path)
             except (NotADirectoryError, FileNotFoundError) as e:
@@ -192,7 +192,7 @@ def _step_projects() -> bool:
     # Always reopens the picker, pre-checked with whatever's already
     # registered -- check/uncheck anything to add or remove it, rather than
     # a separate yes/no gate in front of it.
-    after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
+    after = set(picker.pick_folders(str(Path.home()), initial_selected=before, instruction=instruction))
     for p in sorted(after - before):
         registry.add_project(p)
         print(tc.success(f"  Added {p}"))

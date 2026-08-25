@@ -81,14 +81,18 @@ def _fuzzy_match(query: str, text: str) -> bool:
     return all(ch in it for ch in query.lower())
 
 
-def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[str]:
+def pick_folders(start_dir: str, initial_selected: Iterable[str] = (), instruction: str = "") -> List[str]:
     """Three-pane checkbox browser. Returns the selected absolute paths.
     `initial_selected` pre-checks paths (e.g. already-registered projects)
     so they show up pinned and checked from the start — used for editing an
     existing set rather than building one from scratch. Ctrl-C aborts with
     no changes: it returns exactly `initial_selected` back, not an empty
     list — otherwise cancelling out of an edit session would look like
-    'remove everything that was pre-checked'."""
+    'remove everything that was pre-checked'. `instruction`, if given, is
+    pinned at the very top of the Browse pane — this runs full-screen (an
+    alternate screen buffer), so anything printed before calling this is
+    invisible the moment it opens; text that needs to stay visible has to
+    be part of the picker's own layout, not a print() beforehand."""
     current = Path(start_dir).expanduser().resolve()
     starting_selection = list(initial_selected)
     selected: set = set(starting_selection)
@@ -197,7 +201,10 @@ def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[s
         return lines
 
     def render_browse_header():
-        lines = [("class:path", f" {current}\n")]
+        lines = []
+        if instruction:
+            lines.append(("class:section", f" {instruction}\n"))
+        lines.append(("class:path", f" {current}\n"))
         if search_query:
             lines.append(("class:searchquery", f" /{search_query}\n"))
         return lines
@@ -229,7 +236,7 @@ def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[s
     footer_control = FormattedTextControl(render_footer)
 
     top_window = Window(content=top_control, height=Dimension(max=_TOP_MAX_HEIGHT), always_hide_cursor=True)
-    browse_header_window = Window(content=browse_header_control, height=Dimension(min=1, max=2), always_hide_cursor=True)
+    browse_header_window = Window(content=browse_header_control, height=Dimension(min=1, max=3), always_hide_cursor=True)
     browse_list_window = Window(content=browse_list_control, height=Dimension(weight=1), always_hide_cursor=True)
     footer_window = Window(content=footer_control, height=1, always_hide_cursor=True)
 
@@ -345,15 +352,17 @@ def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[s
     return result or []
 
 
-def prompt_for_projects(start_dir: str) -> List[str]:
+def prompt_for_projects(start_dir: str, instruction: str = "") -> List[str]:
     """Entry point used by onboarding: the interactive picker on a real
     terminal, or a plain repeated-path-prompt fallback otherwise."""
     if not sys.stdin.isatty():
-        return _fallback_prompt()
-    return pick_folders(start_dir)
+        return _fallback_prompt(instruction)
+    return pick_folders(start_dir, instruction=instruction)
 
 
-def _fallback_prompt() -> List[str]:
+def _fallback_prompt(instruction: str = "") -> List[str]:
+    if instruction:
+        print(instruction)
     paths = []
     while True:
         try:
