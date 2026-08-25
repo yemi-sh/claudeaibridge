@@ -21,6 +21,19 @@ import questionary
 
 from . import picker, registry, tunnel
 
+# Same palette as picker.py's _STYLE, for a consistent look across the
+# wizard — questionary's own default leaves pointer/highlighted/selected
+# completely uncolored.
+_MENU_STYLE = questionary.Style([
+    ("qmark", "fg:#61afef bold"),
+    ("question", "bold"),
+    ("pointer", "fg:#98c379 bold"),
+    ("highlighted", "fg:#98c379 bold"),
+    ("selected", "fg:#98c379"),
+    ("answer", "fg:#c678dd bold"),
+    ("instruction", "fg:#5c6370 italic"),
+])
+
 
 def _ask(prompt: str, default: str = "") -> str:
     suffix = f" [{default}]" if default else ""
@@ -65,6 +78,7 @@ def _step_public_url():
                 value="local",
             ),
         ],
+        style=_MENU_STYLE,
     ).ask()
 
     if choice == "own":
