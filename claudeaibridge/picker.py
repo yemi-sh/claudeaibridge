@@ -22,7 +22,8 @@ Controls:
   Backspace  erase search text (only — never navigates)
   Esc        clear search text, or (when no search) go up one level
              (finishes, if already at the top)
-  Ctrl-C     cancel — returns nothing selected
+  Ctrl-C     cancel — reverts to whatever was pre-checked at the start
+             (nothing, if this was a fresh selection)
 
 Falls back to plain repeated path prompts when stdin isn't a real
 terminal (piped input, tests, CI) — prompt_toolkit needs a tty to render
@@ -81,13 +82,16 @@ def _fuzzy_match(query: str, text: str) -> bool:
 
 
 def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[str]:
-    """Three-pane checkbox browser. Returns the selected absolute paths
-    (possibly empty, e.g. on Ctrl-C). `initial_selected` pre-checks paths
-    (e.g. already-registered projects) so they show up pinned and checked
-    from the start — used for editing an existing set rather than building
-    one from scratch."""
+    """Three-pane checkbox browser. Returns the selected absolute paths.
+    `initial_selected` pre-checks paths (e.g. already-registered projects)
+    so they show up pinned and checked from the start — used for editing an
+    existing set rather than building one from scratch. Ctrl-C aborts with
+    no changes: it returns exactly `initial_selected` back, not an empty
+    list — otherwise cancelling out of an edit session would look like
+    'remove everything that was pre-checked'."""
     current = Path(start_dir).expanduser().resolve()
-    selected: set = set(initial_selected)
+    starting_selection = list(initial_selected)
+    selected: set = set(starting_selection)
     # The cursor is tracked by the *identity* of the row it's on, not a raw
     # index — top_rows() grows/shrinks as folders are (de)selected, which
     # would silently shift what a plain integer index points to every time
@@ -326,7 +330,7 @@ def pick_folders(start_dir: str, initial_selected: Iterable[str] = ()) -> List[s
 
     @bindings.add("c-c")
     def _cancel(event):
-        event.app.exit(result=[])
+        event.app.exit(result=starting_selection)
 
     @bindings.add(Keys.Any)
     def _search_type(event):

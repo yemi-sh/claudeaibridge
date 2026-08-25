@@ -67,10 +67,20 @@ def _print_banner() -> None:
     print()
 
 
+class _Cancelled(Exception):
+    """Raised when the user Ctrl-C's out of an interactive prompt. questionary
+    itself swallows KeyboardInterrupt and returns None from .ask() -- that's
+    otherwise indistinguishable from a real answer, so every call site here
+    turns it back into something that actually stops the wizard instead of
+    silently falling through to a default."""
+
+
 def _ask(prompt: str, default: str = "") -> str:
     if sys.stdin.isatty():
         value = questionary.text(prompt, default=default, style=_MENU_STYLE).ask()
-        return value if value is not None else default
+        if value is None:
+            raise _Cancelled()
+        return value
     suffix = f" [{default}]" if default else ""
     try:
         value = input(f"{prompt}{suffix}: ").strip()
@@ -82,7 +92,9 @@ def _ask(prompt: str, default: str = "") -> str:
 def _ask_yes_no(prompt: str, default_yes: bool) -> bool:
     if sys.stdin.isatty():
         value = questionary.confirm(prompt, default=default_yes, style=_MENU_STYLE).ask()
-        return default_yes if value is None else value
+        if value is None:
+            raise _Cancelled()
+        return value
     suffix = " [Y/n]" if default_yes else " [y/N]"
     try:
         value = input(f"{prompt}{suffix}: ").strip().lower()
@@ -118,6 +130,8 @@ def _step_public_url():
         ],
         style=_MENU_STYLE,
     ).ask()
+    if choice is None:
+        raise _Cancelled()
 
     if choice == "own":
         base_url = _ask("Public URL claude.ai should use to reach this server (e.g. https://your-domain.example)")
@@ -155,22 +169,34 @@ def _step_authtoken() -> bool:
 
 def _step_projects() -> bool:
     print("\n--- Projects ---")
-    existing = registry.list_projects()
-    if existing:
+    before = set(registry.list_projects())
+    if before:
         print("Already registered:")
-        for path in sorted(existing):
+        for path in sorted(before):
             print(f"  {path}")
-        if not _ask_yes_no("Register another project?", default_yes=False):
-            return True
 
     print("Pick the folder(s) claude.ai should be able to work in.")
-    for path in picker.prompt_for_projects(str(Path.home())):
-        try:
-            resolved = registry.add_project(path)
-        except (NotADirectoryError, FileNotFoundError) as e:
-            print(f"  error: {e}")
-            continue
-        print(f"  Registered {resolved}")
+
+    if not sys.stdin.isatty():
+        for path in picker.prompt_for_projects(str(Path.home())):
+            try:
+                resolved = registry.add_project(path)
+            except (NotADirectoryError, FileNotFoundError) as e:
+                print(f"  error: {e}")
+                continue
+            print(f"  Registered {resolved}")
+        return bool(registry.list_projects())
+
+    # Always reopens the picker, pre-checked with whatever's already
+    # registered -- check/uncheck anything to add or remove it, rather than
+    # a separate yes/no gate in front of it.
+    after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
+    for p in sorted(after - before):
+        registry.add_project(p)
+        print(f"  Added {p}")
+    for p in sorted(before - after):
+        registry.remove_project(p)
+        print(f"  Removed {p}")
 
     return bool(registry.list_projects())
 
@@ -182,21 +208,25 @@ def run() -> int:
         "project folders you explicitly choose on this machine."
     )
 
-    use_ngrok, base_url, no_auth = _step_public_url()
-    if use_ngrok and not _step_authtoken():
-        return 1
-    if not _step_projects():
-        if use_ngrok:
-            next_cmd = "claudeaibridge serve --ngrok"
-        elif base_url:
-            next_cmd = f"claudeaibridge serve --base-url {base_url}"
-        else:
-            next_cmd = "claudeaibridge serve --no-auth"
-        print(
-            "\nNo projects registered. You need at least one before starting "
-            f"the server — run `claudeaibridge add-project <path>` and then `{next_cmd}`."
-        )
-        return 1
+    try:
+        use_ngrok, base_url, no_auth = _step_public_url()
+        if use_ngrok and not _step_authtoken():
+            return 1
+        if not _step_projects():
+            if use_ngrok:
+                next_cmd = "claudeaibridge serve --ngrok"
+            elif base_url:
+                next_cmd = f"claudeaibridge serve --base-url {base_url}"
+            else:
+                next_cmd = "claudeaibridge serve --no-auth"
+            print(
+                "\nNo projects registered. You need at least one before starting "
+                f"the server — run `claudeaibridge add-project <path>` and then `{next_cmd}`."
+            )
+            return 1
+    except _Cancelled:
+        print("\nSetup cancelled.")
+        return 130
 
     print("\n--- Starting server ---")
     from .cli import run_server
