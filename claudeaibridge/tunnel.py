@@ -3,10 +3,8 @@ ngrok tunnel — gives the local server a public HTTPS URL claude.ai can reach.
 
 Every ngrok account (free tier included) is permanently assigned one static
 domain at signup, and the agent binds to it automatically once
-authenticated with just the authtoken — no separate reservation step and no
-separate API key needed. `set_domain`/`get_domain` exist only as a manual
-override, e.g. for someone on a paid plan who wants to point at a different
-domain than their default one.
+authenticated with just the authtoken — no reservation step, no separate
+API key, no domain configuration needed.
 """
 
 import os
@@ -16,7 +14,6 @@ from typing import Optional
 from . import registry
 
 _AUTHTOKEN_FILE = "ngrok_authtoken"
-_DOMAIN_FILE = "ngrok_domain"
 
 
 def _read(name: str) -> Optional[str]:
@@ -41,23 +38,11 @@ def get_authtoken() -> Optional[str]:
     return _read(_AUTHTOKEN_FILE) or os.environ.get("NGROK_AUTHTOKEN")
 
 
-def set_domain(domain: str) -> None:
-    _write_secret(_DOMAIN_FILE, domain)
-
-
-def get_domain() -> Optional[str]:
-    return _read(_DOMAIN_FILE)
-
-
 def status() -> dict:
-    token = get_authtoken()
-    return {
-        "authtoken_configured": token is not None,
-        "domain": get_domain(),
-    }
+    return {"authtoken_configured": get_authtoken() is not None}
 
 
-def start(local_port: int, authtoken: Optional[str] = None, domain: Optional[str] = None):
+def start(local_port: int, authtoken: Optional[str] = None):
     """
     Open an ngrok tunnel forwarding to 127.0.0.1:local_port and return its
     public HTTPS URL (str). The returned Listener object must be kept alive
@@ -74,10 +59,5 @@ def start(local_port: int, authtoken: Optional[str] = None, domain: Optional[str
             "claudeaibridge ngrok set-authtoken <token>"
         )
 
-    options = {"authtoken": token}
-    resolved_domain = domain or get_domain()
-    if resolved_domain:
-        options["domain"] = resolved_domain
-
-    listener = ngrok.forward(local_port, "http", **options)
+    listener = ngrok.forward(local_port, "http", authtoken=token)
     return listener

@@ -5,9 +5,10 @@ Walks through the one-time setup a new install needs (ngrok authtoken, at
 least one registered project), then hands off to the same server-starting
 code path as `claudeaibridge serve`. The authtoken alone is enough — every
 ngrok account is given one permanent static domain, and the agent binds to
-it automatically once authenticated, so there's no separate domain step
-here. `claudeaibridge ngrok set-domain` still exists for anyone who wants
-to point at a different (e.g. paid custom) domain instead.
+it automatically once authenticated. Someone with their own domain and
+their own way of routing to this machine (a VPS, their own reverse proxy,
+an already-running tunnel) doesn't need ngrok at all — see `serve
+--base-url` instead.
 Re-running `init` later is safe — every step shows what's already
 configured and lets you keep it or change it, rather than forcing you
 through the whole thing again.
