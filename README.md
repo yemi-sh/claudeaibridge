@@ -42,17 +42,12 @@ computer. The design leans hard on containment rather than trust:
 
 ## Interactive widgets
 
-Ask Claude to "show my projects" or "let me pick a project" and, on hosts that
-support it, `browse_projects` renders as an actual clickable list in the chat
-instead of plain text — clicking an entry calls `select_project` for you. On a
-host without widget support it degrades automatically to the same plain project
-list `list_projects` returns, so it's always safe to call either way.
-
-`file_write` and `file_edit` do the same automatically — on hosts that support
-it, every successful edit (and a failed one, with the reason why) is shown as a
-rendered diff right there, no extra step required. Claude still gets the exact
-same result data either way (what changed, backup path, error details) — the
-widget is a rendering of that same data, not a replacement for it.
+On hosts that support it, `file_write` and `file_edit` render their change as a
+colored, line-by-line diff right there in the chat — automatically, no extra
+step required. Claude still gets the exact same result data either way (what
+changed, backup path, error details) — the widget is a rendering of that same
+data, not a replacement for it. On a host without widget support, the tool's
+plain result is unaffected.
 
 ## Platform support
 
@@ -211,8 +206,8 @@ python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN se
 - The launchd (macOS) path for the background service is implemented but
   unverified — it was built and tested only on Linux (systemd), since that's the
   only platform available during development.
-- Widgets so far: `browse_projects` (clickable project picker), and
-  `file_write`/`file_edit` rendering their own change as a diff.
+- One widget so far: `file_write`/`file_edit` rendering their own change as a
+  colored diff. Confirmed working live against claude.ai.
 
 ## License
 

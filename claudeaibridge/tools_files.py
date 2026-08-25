@@ -24,7 +24,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from prefab_ui.components import Code, Column, Heading, Text
+from prefab_ui.components import Column, Text
 
 from . import audit, session
 from .paths import PathEscapesProject, resolve_within
@@ -153,17 +153,37 @@ def _write_backup(root: str, file_path: Path, content: str, reason: str) -> dict
     return {"backup_path": str(backup_path), "backup_id": timestamp, "backup_reason": reason}
 
 
+def _diff_line_style(line: str) -> str:
+    # Code's bundled syntax highlighter doesn't know the "diff" language, so
+    # unified-diff text comes out monochrome — color each line by hand instead.
+    if line.startswith("+++") or line.startswith("---"):
+        return "text-muted-foreground"
+    if line.startswith("@@"):
+        return "text-sky-500"
+    if line.startswith("+"):
+        return "text-green-500 bg-green-500/10"
+    if line.startswith("-"):
+        return "text-red-500 bg-red-500/10"
+    return "text-muted-foreground"
+
+
 def _diff_view(title: str, diff_text: str):
-    with Column(gap=8) as view:
-        Heading(title)
-        Code(diff_text, language="diff")
+    with Column(gap=6) as view:
+        Text(title, bold=True, code=True, css_class="text-sm")
+        with Column(
+            gap=0,
+            css_class="font-mono text-xs leading-5 whitespace-pre overflow-x-auto "
+                      "max-h-64 overflow-y-auto rounded-md border border-border p-2",
+        ):
+            for line in diff_text.splitlines():
+                Text(line or " ", css_class=_diff_line_style(line))
     return view
 
 
 def _message_view(title: str, message: str):
-    with Column(gap=8) as view:
-        Heading(title)
-        Text(message)
+    with Column(gap=6) as view:
+        Text(title, bold=True, code=True, css_class="text-sm")
+        Text(message, css_class="text-sm text-muted-foreground")
     return view
 
 
