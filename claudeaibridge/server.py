@@ -8,7 +8,7 @@ are added on top.
 
 from fastmcp import FastMCP
 
-from . import tools_debug, tools_files, tools_projects, tools_shell
+from . import tools_files, tools_projects, tools_shell
 
 
 def create_app(auth_provider=None) -> FastMCP:
@@ -29,7 +29,6 @@ def create_app(auth_provider=None) -> FastMCP:
     tools_projects.register(mcp)
     tools_files.register(mcp)
     tools_shell.register(mcp)
-    tools_debug.register(mcp)  # TEMPORARY — remove once widget support is confirmed/denied
     return mcp
 
 
