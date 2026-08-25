@@ -72,19 +72,30 @@ This walks you through everything:
    *or* your own domain/tunnel if you already have one, *or* local-only for testing.
 2. Picking the project folder(s) claude.ai should be able to work in, via an
    interactive browser (arrow keys to navigate, Space to select, type to search).
-3. Starting the server and printing the connector URL.
+3. Installing itself as a background service (systemd on Linux, launchd on macOS)
+   and printing the connector URL — you can close the terminal, it keeps running.
 
 Then, in claude.ai: **Settings → Connectors → Add custom connector**, paste the
 printed URL. claude.ai opens a browser tab to authorize — approve it on the consent
 page — and you're connected. Ask Claude to list available projects, select one, and
 start working.
 
+Check on it anytime with `claudeaibridge status`. If no service manager is available
+(Windows, or a Linux setup without a systemd user session), `init` falls back to
+running in the foreground instead.
+
 ## Command reference
 
 ### `claudeaibridge init`
 
 The interactive setup wizard described above. Safe to re-run — every step shows
-what's already configured and lets you keep or change it.
+what's already configured and lets you keep or change it. Re-running it re-installs
+the background service with whatever you choose this time, replacing the old one.
+
+### `claudeaibridge status`
+
+Shows whether the background service is currently running, and the last connector
+URL it printed.
 
 ### Projects
 
@@ -136,20 +147,6 @@ configure. If you're on a paid plan and want a custom domain instead, run your o
 `ngrok http --domain=...` process and point `claudeaibridge serve` at it with
 `--base-url` (no `--ngrok`).
 
-### `claudeaibridge service`
-
-Runs `serve` as a background service instead of a foreground terminal process — a
-systemd user service on Linux, a launchd user agent on macOS. Neither needs root.
-
-```bash
-claudeaibridge service install --ngrok   # takes the same flags as `serve`
-claudeaibridge service status
-claudeaibridge service uninstall
-```
-
-Installing starts it immediately and enables it to survive closing the terminal;
-on Linux it also restarts automatically if the process crashes (`Restart=on-failure`).
-
 ## Configuration
 
 Everything lives under `~/.config/claudeaibridge/` (or `$XDG_CONFIG_HOME/claudeaibridge`):
@@ -159,6 +156,9 @@ Everything lives under `~/.config/claudeaibridge/` (or `$XDG_CONFIG_HOME/claudea
 - `oauth_state.json` — registered OAuth clients and tokens, so approving the
   connector in claude.ai is a one-time action, not something you redo on every
   restart
+- `connector_url` — the last connector URL the server printed, so `claudeaibridge
+  status` has something to show even when the server is running as a background
+  service (and its own stdout isn't something you're watching)
 
 ## Building from source
 
@@ -181,10 +181,12 @@ python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN se
 
 ## Known limitations
 
-- Windows isn't supported.
-- `service install`'s launchd path (macOS) is implemented but unverified — it was
-  built and tested only on Linux (systemd), since that's the only platform available
-  during development.
+- Windows isn't supported, and `init`'s background-service step needs systemd
+  (Linux) or launchd (macOS) — where neither is available it falls back to running
+  in the foreground.
+- The launchd (macOS) path for the background service is implemented but
+  unverified — it was built and tested only on Linux (systemd), since that's the
+  only platform available during development.
 - No interactive claude.ai-side widgets yet (a project picker, diff previews) —
   tool calls render as claude.ai's standard tool-call cards for now.
 

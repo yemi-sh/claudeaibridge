@@ -106,6 +106,7 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
         auth_provider = ConsentOAuthProvider(base_url=base_url, state_dir=registry.config_dir())
 
     connector_url = f"{(base_url or f'http://{host}:{port}').rstrip('/')}/mcp"
+    registry.write_connector_url(connector_url)
     print()
     print(tc.header("=" * 60))
     print("Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
@@ -158,57 +159,26 @@ def _cmd_ngrok_status(_args) -> int:
     return 0
 
 
-def _serve_flags_from_args(args) -> list:
-    """Reconstructs the equivalent `serve` flags from parsed args, so
-    `service install` can bake the same options into the service file."""
-    flags = []
-    if args.ngrok:
-        flags.append("--ngrok")
-    if args.base_url:
-        flags += ["--base-url", args.base_url]
-    if args.no_auth:
-        flags.append("--no-auth")
-    if args.host != "127.0.0.1":
-        flags += ["--host", args.host]
-    if args.port != 8420:
-        flags += ["--port", str(args.port)]
-    return flags
-
-
-def _cmd_service_install(args) -> int:
-    import subprocess
-
+def _cmd_status(_args) -> int:
     from . import service
 
     try:
-        path = service.install(_serve_flags_from_args(args))
-    except (RuntimeError, subprocess.CalledProcessError) as e:
-        print(tc.error(f"error: {e}"), file=sys.stderr)
-        return 1
-    print(tc.success(f"Service installed and started: {path}"))
-    return 0
+        active = service.is_active()
+    except RuntimeError:
+        active = None
 
+    if active is True:
+        print(tc.success("Background service: running"))
+    elif active is False:
+        print(tc.hint("Background service: not running"))
+    else:
+        print(tc.hint("Background service: not supported on this platform"))
 
-def _cmd_service_uninstall(_args) -> int:
-    from . import service
-
-    try:
-        service.uninstall()
-    except RuntimeError as e:
-        print(tc.error(f"error: {e}"), file=sys.stderr)
-        return 1
-    print(tc.success("Service uninstalled."))
-    return 0
-
-
-def _cmd_service_status(_args) -> int:
-    from . import service
-
-    try:
-        print(service.status())
-    except RuntimeError as e:
-        print(tc.error(f"error: {e}"), file=sys.stderr)
-        return 1
+    url = registry.read_connector_url()
+    if url:
+        print(f"Last known connector URL: {tc.accent(url)}")
+    else:
+        print(tc.hint("No connector URL recorded yet — run `claudeaibridge init` or `claudeaibridge serve`."))
     return 0
 
 
@@ -249,22 +219,8 @@ def main() -> None:
     p_nstatus = ngrok_sub.add_parser("status", help="Show current tunnel configuration.")
     p_nstatus.set_defaults(func=_cmd_ngrok_status)
 
-    p_service = sub.add_parser("service", help="Run as a background service (systemd on Linux, launchd on macOS).")
-    service_sub = p_service.add_subparsers(dest="service_command", required=True)
-
-    p_sinstall = service_sub.add_parser("install", help="Install and start the background service.")
-    p_sinstall.add_argument("--host", default="127.0.0.1")
-    p_sinstall.add_argument("--port", type=int, default=8420)
-    p_sinstall.add_argument("--base-url", default=None, help="Same meaning as `serve --base-url`.")
-    p_sinstall.add_argument("--no-auth", action="store_true", help="Same meaning as `serve --no-auth`.")
-    p_sinstall.add_argument("--ngrok", action="store_true", help="Same meaning as `serve --ngrok`.")
-    p_sinstall.set_defaults(func=_cmd_service_install)
-
-    p_suninstall = service_sub.add_parser("uninstall", help="Stop and remove the background service.")
-    p_suninstall.set_defaults(func=_cmd_service_uninstall)
-
-    p_sstatus = service_sub.add_parser("status", help="Show background service status.")
-    p_sstatus.set_defaults(func=_cmd_service_status)
+    p_status = sub.add_parser("status", help="Show whether the background service is running and its connector URL.")
+    p_status.set_defaults(func=_cmd_status)
 
     args = parser.parse_args()
     try:

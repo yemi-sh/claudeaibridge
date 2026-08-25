@@ -20,6 +20,7 @@ restart and no IPC between the two.
 import json
 import os
 import time
+from typing import Optional
 from pathlib import Path
 
 
@@ -32,6 +33,30 @@ def config_dir() -> Path:
 
 def _registry_path() -> Path:
     return config_dir() / "projects.json"
+
+
+def _connector_url_path() -> Path:
+    return config_dir() / "connector_url"
+
+
+def write_connector_url(url: str) -> None:
+    """Records the last URL the server printed as its connector address --
+    written by run_server() regardless of whether it's running in the
+    foreground or as a background service, so `claudeaibridge status` (which
+    can't just read a backgrounded process's stdout) has something to show."""
+    _connector_url_path().write_text(url, encoding="utf-8")
+
+
+def clear_connector_url() -> None:
+    _connector_url_path().unlink(missing_ok=True)
+
+
+def read_connector_url() -> Optional[str]:
+    path = _connector_url_path()
+    if not path.exists():
+        return None
+    value = path.read_text(encoding="utf-8").strip()
+    return value or None
 
 
 def _load() -> dict:

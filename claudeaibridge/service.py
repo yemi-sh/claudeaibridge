@@ -6,6 +6,7 @@ macOS. Neither requires root: both are per-user mechanisms (systemd
 needs elevated privileges.
 """
 
+import os
 import platform
 import shutil
 import subprocess
@@ -15,6 +16,18 @@ from typing import List
 
 SERVICE_NAME = "claudeaibridge"
 LAUNCHD_LABEL = "com.claudeaibridge.serve"
+
+
+def _env_overrides() -> dict:
+    """Environment variables to carry into the service process. systemd/
+    launchd give spawned services a bare default environment, not the
+    installing shell's -- without this, a custom XDG_CONFIG_HOME would
+    make the interactive CLI and the background service silently read/write
+    two different config directories."""
+    overrides = {}
+    if "XDG_CONFIG_HOME" in os.environ:
+        overrides["XDG_CONFIG_HOME"] = os.environ["XDG_CONFIG_HOME"]
+    return overrides
 
 
 def _executable_argv() -> List[str]:
@@ -40,6 +53,7 @@ def _systemd_unit_path() -> Path:
 
 def _install_linux(serve_args: List[str]) -> str:
     argv = _executable_argv() + ["serve"] + serve_args
+    env_lines = "".join(f"Environment={k}={v}\n" for k, v in _env_overrides().items())
     unit = f"""[Unit]
 Description=claudeaibridge - claude.ai coding agent bridge
 After=network-online.target
@@ -47,7 +61,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={" ".join(argv)}
+{env_lines}ExecStart={" ".join(argv)}
 Restart=on-failure
 RestartSec=5
 
@@ -89,6 +103,11 @@ def _install_macos(serve_args: List[str]) -> str:
     log_path = Path.home() / "Library" / "Logs" / "claudeaibridge.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     args_xml = "\n".join(f"        <string>{a}</string>" for a in argv)
+    env_overrides = _env_overrides()
+    env_xml = ""
+    if env_overrides:
+        entries = "\n".join(f"        <key>{k}</key><string>{v}</string>" for k, v in env_overrides.items())
+        env_xml = f"    <key>EnvironmentVariables</key>\n    <dict>\n{entries}\n    </dict>\n"
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -98,7 +117,7 @@ def _install_macos(serve_args: List[str]) -> str:
     <array>
 {args_xml}
     </array>
-    <key>RunAtLoad</key><true/>
+{env_xml}    <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
     <key>StandardOutPath</key><string>{log_path}</string>
     <key>StandardErrorPath</key><string>{log_path}</string>
@@ -130,10 +149,14 @@ def _status_macos() -> str:
 def install(serve_args: List[str]) -> str:
     system = platform.system()
     if system == "Linux":
+        if not shutil.which("systemctl"):
+            raise RuntimeError("no systemd user session available (systemctl not found)")
         return _install_linux(serve_args)
     if system == "Darwin":
+        if not shutil.which("launchctl"):
+            raise RuntimeError("launchctl not found")
         return _install_macos(serve_args)
-    raise RuntimeError(f"Background service install is not supported on {system}.")
+    raise RuntimeError(f"background service install is not supported on {system}")
 
 
 def uninstall() -> None:
@@ -152,4 +175,20 @@ def status() -> str:
         return _status_linux()
     if system == "Darwin":
         return _status_macos()
+    raise RuntimeError(f"Background service is not supported on {system}.")
+
+
+def is_active() -> bool:
+    """True if the background service is currently installed and running.
+    False (not an exception) for 'not installed' or 'not running' -- only
+    raises for a platform with no service manager concept at all."""
+    system = platform.system()
+    if system == "Linux":
+        result = subprocess.run(
+            ["systemctl", "--user", "is-active", SERVICE_NAME], capture_output=True, text=True
+        )
+        return result.stdout.strip() == "active"
+    if system == "Darwin":
+        result = subprocess.run(["launchctl", "list", LAUNCHD_LABEL], capture_output=True, text=True)
+        return result.returncode == 0
     raise RuntimeError(f"Background service is not supported on {system}.")

@@ -2,8 +2,11 @@
 Interactive first-run setup: `claudeaibridge init`.
 
 Walks through the one-time setup a new install needs (ngrok authtoken, at
-least one registered project), then hands off to the same server-starting
-code path as `claudeaibridge serve`. The authtoken alone is enough — every
+least one registered project), then installs and starts the server as a
+background service (systemd/launchd) so it keeps running after this
+terminal closes — falling back to a foreground `claudeaibridge serve` if
+no service manager is available (e.g. Windows, or a container without
+systemd). The authtoken alone is enough — every
 ngrok account is given one permanent static domain, and the agent binds to
 it automatically once authenticated. Someone with their own domain and
 their own way of routing to this machine (a VPS, their own reverse proxy,
@@ -15,6 +18,7 @@ through the whole thing again.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import pyfiglet
@@ -232,6 +236,44 @@ def run() -> int:
         return 130
 
     print(tc.header("\n--- Starting server ---"))
-    from .cli import run_server
 
-    return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
+    serve_args = []
+    if use_ngrok:
+        serve_args.append("--ngrok")
+    if base_url:
+        serve_args += ["--base-url", base_url]
+    if no_auth:
+        serve_args.append("--no-auth")
+
+    from . import service
+
+    try:
+        service_path = service.install(serve_args)
+    except Exception as e:
+        print(tc.hint(f"Could not run as a background service ({e}) — running in the foreground instead."))
+        from .cli import run_server
+
+        return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
+
+    print(tc.success(f"Installed and running in the background: {service_path}"))
+    print("Waiting for it to come up...")
+
+    registry.clear_connector_url()
+    url = None
+    for _ in range(20):
+        url = registry.read_connector_url()
+        if url:
+            break
+        time.sleep(0.5)
+
+    if url:
+        print()
+        print(tc.header("=" * 60))
+        print("Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
+        print(f"  {tc.accent(url)}")
+        print(tc.header("=" * 60))
+    else:
+        print(tc.error("Could not confirm the server started — check `claudeaibridge status`."))
+
+    print(tc.hint("\nIt'll keep running in the background. Check on it anytime with: claudeaibridge status"))
+    return 0
