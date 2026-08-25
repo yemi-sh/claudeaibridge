@@ -43,7 +43,7 @@ _GRADIENT_END = (0xC6, 0x78, 0xDD)
 
 
 def _print_banner() -> None:
-    art = pyfiglet.figlet_format("claudeaibridge", font="small").rstrip("\n").split("\n")
+    art = pyfiglet.figlet_format("claudeaibridge", font="standard").rstrip("\n").split("\n")
     width = max((len(line) for line in art), default=1)
     colorize = sys.stdout.isatty()
 
