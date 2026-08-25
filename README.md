@@ -136,6 +136,20 @@ configure. If you're on a paid plan and want a custom domain instead, run your o
 `ngrok http --domain=...` process and point `claudeaibridge serve` at it with
 `--base-url` (no `--ngrok`).
 
+### `claudeaibridge service`
+
+Runs `serve` as a background service instead of a foreground terminal process — a
+systemd user service on Linux, a launchd user agent on macOS. Neither needs root.
+
+```bash
+claudeaibridge service install --ngrok   # takes the same flags as `serve`
+claudeaibridge service status
+claudeaibridge service uninstall
+```
+
+Installing starts it immediately and enables it to survive closing the terminal;
+on Linux it also restarts automatically if the process crashes (`Restart=on-failure`).
+
 ## Configuration
 
 Everything lives under `~/.config/claudeaibridge/` (or `$XDG_CONFIG_HOME/claudeaibridge`):
@@ -168,7 +182,9 @@ python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN se
 ## Known limitations
 
 - Windows isn't supported.
-- No background-service mode yet (systemd/launchd) — `serve` runs in the foreground.
+- `service install`'s launchd path (macOS) is implemented but unverified — it was
+  built and tested only on Linux (systemd), since that's the only platform available
+  during development.
 - No interactive claude.ai-side widgets yet (a project picker, diff previews) —
   tool calls render as claude.ai's standard tool-call cards for now.
 
