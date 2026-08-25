@@ -44,10 +44,9 @@ computer. The design leans hard on containment rather than trust:
 
 On hosts that support it, `file_write` and `file_edit` render their change as a
 colored, line-by-line diff right there in the chat — automatically, no extra
-step required. It's collapsed under the filename by default; click to expand.
-Claude still gets the exact same result data either way (what changed, backup
-path, error details) — the widget is a rendering of that same data, not a
-replacement for it. On a host without widget support, the tool's
+step required. Claude still gets the exact same result data either way (what
+changed, backup path, error details) — the widget is a rendering of that same
+data, not a replacement for it. On a host without widget support, the tool's
 plain result is unaffected.
 
 ## Platform support

@@ -55,14 +55,12 @@ async def main():
                 })
 
                 def diff_lines_from_widget(result):
-                    # Div(pf-app-root) > Accordion > AccordionItem > Column(diff lines)
+                    # Div(pf-app-root) > Column(title, diff-lines Column)
                     root = result.structured_content["view"]
                     assert root["cssClass"] == "pf-app-root p-2"
-                    accordion = root["children"][0]
-                    assert accordion["type"] == "Accordion"
-                    item = accordion["children"][0]
-                    assert item["type"] == "AccordionItem"
-                    diff_col = item["children"][0]
+                    outer = root["children"][0]
+                    assert outer["type"] == "Column"
+                    diff_col = outer["children"][1]
                     assert diff_col["type"] == "Column"
                     return [c["content"] for c in diff_col["children"]]
 
