@@ -64,7 +64,7 @@ today, just a build step.
 **Option 2 — from source, with Python 3.10+:**
 
 ```bash
-git clone <this repo's URL>
+git clone https://github.com/yemi-sh/claudeaibridge.git
 cd claudeaibridge
 python3 -m venv .venv
 .venv/bin/pip install -e .
