@@ -55,12 +55,16 @@ async def main():
                 })
 
                 def diff_lines_from_widget(result):
-                    # Div(pf-app-root) > Column(title, diff-lines Column)
-                    root = result.structured_content["view"]
-                    assert root["cssClass"] == "pf-app-root p-2"
-                    outer = root["children"][0]
+                    # Div(pf-app-root) > Column(toggle-button Condition, diff Condition)
+                    # state.expanded=True: open by default, collapsible via the toggle.
+                    sc = result.structured_content
+                    assert sc["state"] == {"expanded": True}
+                    assert sc["view"]["cssClass"] == "pf-app-root p-0"
+                    outer = sc["view"]["children"][0]
                     assert outer["type"] == "Column"
-                    diff_col = outer["children"][1]
+                    diff_condition = outer["children"][1]
+                    assert diff_condition["type"] == "Condition"
+                    diff_col = diff_condition["cases"][0]["children"][0]
                     assert diff_col["type"] == "Column"
                     return [c["content"] for c in diff_col["children"]]
 
