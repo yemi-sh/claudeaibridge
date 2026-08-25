@@ -105,6 +105,12 @@ the background service with whatever you choose this time, replacing the old one
 Shows whether the background service is currently running, and the last connector
 URL it printed.
 
+### `claudeaibridge stop`
+
+Stops the background service and uninstalls it (removes the systemd/launchd unit
+entirely, not just stops it) — the connector goes offline until you run `init` or
+`serve` again.
+
 ### Projects
 
 ```bash

@@ -182,6 +182,19 @@ def _cmd_status(_args) -> int:
     return 0
 
 
+def _cmd_stop(_args) -> int:
+    from . import service
+
+    try:
+        service.uninstall()
+    except RuntimeError as e:
+        print(tc.error(f"error: {e}"), file=sys.stderr)
+        return 1
+    registry.clear_connector_url()
+    print(tc.success("Background service stopped and uninstalled."))
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="claudeaibridge")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -221,6 +234,9 @@ def main() -> None:
 
     p_status = sub.add_parser("status", help="Show whether the background service is running and its connector URL.")
     p_status.set_defaults(func=_cmd_status)
+
+    p_stop = sub.add_parser("stop", help="Stop and uninstall the background service.")
+    p_stop.set_defaults(func=_cmd_stop)
 
     args = parser.parse_args()
     try:
