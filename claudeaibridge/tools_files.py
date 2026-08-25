@@ -23,7 +23,7 @@ from fastmcp import Context
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from . import session
+from . import audit, session
 from .paths import PathEscapesProject, resolve_within
 
 
@@ -180,11 +180,13 @@ def register(mcp):
             raise ToolError("Content contains characters that cannot be encoded as UTF-8.")
 
         file_path.write_text(content, encoding="utf-8")
+        operation = "overwrite" if was_overwrite else "create"
+        audit.log(root, "file_write", f"{operation} {file_path} — {reason}")
         return {
             "success": True,
             "path": str(file_path),
             "reason": reason,
-            "operation": "overwrite" if was_overwrite else "create",
+            "operation": operation,
             "lines_written": len(content.split("\n")),
             "chars_written": len(content),
         }
@@ -239,8 +241,10 @@ def register(mcp):
             result["reason"] = reason
             result.update(backup)
             result["diff"] = _generate_diff(current_content, new_content_written, file_path.name)
+            audit.log(root, "file_edit", f"edit {file_path} — {reason}")
         else:
             result.pop("_new_content", None)
+            audit.log(root, "file_edit", f"FAILED {file_path} — {result.get('error', 'unknown error')}")
         return result
 
     @mcp.tool(
@@ -285,6 +289,9 @@ def register(mcp):
                 results.append({"path": str(src), "status": "error", "message": str(e)})
 
         success_count = sum(1 for r in results if r["status"] == "success")
+        moved = [r["path"] for r in results if r["status"] == "success"]
+        if moved:
+            audit.log(root, "file_trash", f"{', '.join(moved)} — {reason}")
         return {
             "success": success_count == len(paths),
             "reason": reason,

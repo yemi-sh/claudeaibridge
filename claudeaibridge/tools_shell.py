@@ -30,6 +30,7 @@ from typing import Annotated, Literal, Optional
 from fastmcp import Context
 from pydantic import Field
 
+from . import audit
 from . import sandbox
 from . import session
 
@@ -577,7 +578,9 @@ def register(mcp):
           error          — could not be launched.
         """
         root = await session.get_active_project(ctx)
-        return await _run_command(command, timeout, root)
+        result = await _run_command(command, timeout, root)
+        audit.log(root, "shell_execute", f"{command!r} -> {result.get('status')}")
+        return result
 
     @mcp.tool(
         name="jobs",
