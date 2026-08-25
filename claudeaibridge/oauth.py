@@ -19,6 +19,7 @@ re-approval in claude.ai on every launch — approval is a one-time action per
 install, not a per-boot one.
 """
 
+import html
 import json
 import secrets
 import time
@@ -185,7 +186,7 @@ class ConsentOAuthProvider(InMemoryOAuthProvider):
 
 def _render_consent(request_id: str, client: OAuthClientInformationFull, projects: dict) -> str:
     client_name = client.client_name or client.client_id
-    project_list = "".join(f"<li><code>{name}</code> — {info['path']}</li>" for name, info in sorted(projects.items()))
+    project_list = "".join(f"<li><code>{html.escape(path)}</code></li>" for path in sorted(projects))
     if not project_list:
         project_list = "<li><em>No projects registered yet — register one with `claudeaibridge add-project` before using the connector.</em></li>"
     return f"""<!doctype html>

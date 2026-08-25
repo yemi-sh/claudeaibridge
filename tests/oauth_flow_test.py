@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 import httpx
 
@@ -55,9 +56,20 @@ def start_authorization(client: httpx.Client, client_id: str, state: str, challe
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory() as tmp_config:
+    with tempfile.TemporaryDirectory() as tmp_config, tempfile.TemporaryDirectory() as tmp_project:
         env = dict(os.environ)
         env["XDG_CONFIG_HOME"] = tmp_config
+
+        # A registered project so the consent page's project-listing code path
+        # actually runs -- an empty registry masks bugs there entirely (which
+        # is exactly how a real one shipped previously: the old test always
+        # ran against zero projects).
+        add = subprocess.run(
+            [sys.executable, "-m", "claudeaibridge.cli", "add-project", tmp_project],
+            env=env, capture_output=True, text=True,
+        )
+        assert add.returncode == 0, add.stderr
+        registered_path = str(Path(tmp_project).resolve())
 
         proc = subprocess.Popen(
             [sys.executable, "-m", "claudeaibridge.cli", "serve", "--port", str(PORT)],
@@ -103,6 +115,7 @@ def main() -> int:
 
             page = client.get(f"{BASE}/consent?request_id={request_id}")
             assert page.status_code == 200 and "Approve" in page.text
+            assert registered_path in page.text, "consent page should list the registered project's path"
 
             unauth = client.post(f"{BASE}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
                                   headers={"Accept": "application/json, text/event-stream"})
