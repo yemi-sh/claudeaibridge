@@ -33,13 +33,13 @@ def _cmd_list_projects(_args) -> int:
     return 0
 
 
-def run_server(host: str, port: int, tunnel_choice: str, base_url: Optional[str], no_auth: bool) -> int:
+def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], no_auth: bool) -> int:
     """Shared by `serve` and `init` (init gathers config interactively, then
     ends by calling straight into this — same code path either way)."""
     from . import server
 
     listener = None
-    if tunnel_choice == "ngrok":
+    if use_ngrok:
         from . import tunnel
 
         try:
@@ -79,7 +79,7 @@ def _cmd_serve(args) -> int:
 
         server.run_stdio()
         return 0
-    return run_server(args.host, args.port, args.tunnel, args.base_url, args.no_auth)
+    return run_server(args.host, args.port, args.ngrok, args.base_url, args.no_auth)
 
 
 def _cmd_init(_args) -> int:
@@ -136,9 +136,9 @@ def main() -> None:
     p_serve.add_argument("--transport", choices=["http", "stdio"], default="http")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8420)
-    p_serve.add_argument("--base-url", default=None, help="Public URL this server is reachable at. Overridden automatically when --tunnel ngrok is used. Defaults to http://<host>:<port>.")
+    p_serve.add_argument("--base-url", default=None, help="Public URL this server is reachable at (e.g. your own domain/tunnel). Overridden automatically when --ngrok is used. Defaults to http://<host>:<port>.")
     p_serve.add_argument("--no-auth", action="store_true", help="Disable OAuth (local testing only — do not use with a public tunnel).")
-    p_serve.add_argument("--tunnel", choices=["none", "ngrok"], default="none", help="Expose the server publicly via ngrok. Requires 'claudeaibridge tunnel set-authtoken' first.")
+    p_serve.add_argument("--ngrok", action="store_true", help="Expose the server publicly via ngrok. Requires 'claudeaibridge tunnel set-authtoken' first. Omit this if you're using your own domain/tunnel via --base-url instead.")
     p_serve.set_defaults(func=_cmd_serve)
 
     p_tunnel = sub.add_parser("tunnel", help="Configure the ngrok tunnel.")

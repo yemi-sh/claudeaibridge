@@ -43,7 +43,7 @@ def main() -> int:
         assert set_token.returncode == 0, set_token.stderr
 
         proc = subprocess.Popen(
-            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--tunnel", "ngrok", "--port", "8424"],
+            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--ngrok", "--port", "8424"],
             env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
         try:

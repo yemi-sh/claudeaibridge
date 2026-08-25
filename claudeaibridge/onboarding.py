@@ -95,11 +95,11 @@ def run() -> int:
         print(
             "\nNo projects registered. You need at least one before starting "
             "the server — run `claudeaibridge add-project <path>` and then "
-            "`claudeaibridge serve --tunnel ngrok`."
+            "`claudeaibridge serve --ngrok`."
         )
         return 1
 
     print("\n--- Starting server ---")
     from .cli import run_server
 
-    return run_server(host="127.0.0.1", port=8420, tunnel_choice="ngrok", base_url=None, no_auth=False)
+    return run_server(host="127.0.0.1", port=8420, use_ngrok=True, base_url=None, no_auth=False)
