@@ -169,7 +169,7 @@ def register(mcp):
     ) -> dict:
         """Create a new file or completely overwrite an existing one. For small
         edits to an existing file, prefer file_edit — it keeps a backup."""
-        _, root = await session.get_active_project(ctx)
+        root = await session.get_active_project(ctx)
         file_path = _resolve_or_raise(root, path)
 
         was_overwrite = file_path.exists() and file_path.is_file()
@@ -217,7 +217,7 @@ def register(mcp):
         if replacements is not None and (old_content is not None or new_content is not None):
             raise ToolError("Use either old_content/new_content or replacements, not both.")
 
-        _, root = await session.get_active_project(ctx)
+        root = await session.get_active_project(ctx)
         file_path = _resolve_or_raise(root, path)
         if not file_path.exists() or not file_path.is_file():
             raise ToolError(f"File not found: {path}")
@@ -260,7 +260,7 @@ def register(mcp):
     ) -> dict:
         """Move files/directories to .claudeaibridge/trash/ inside the project
         instead of deleting them — a safer alternative to permanent deletion."""
-        _, root = await session.get_active_project(ctx)
+        root = await session.get_active_project(ctx)
         trash_dir = _trash_dir(root)
         results = []
         for p in paths:
@@ -309,7 +309,7 @@ def register(mcp):
     ) -> dict:
         """List a directory's contents (like ls -la), with a line count for
         files and an entry count for subdirectories."""
-        _, root = await session.get_active_project(ctx)
+        root = await session.get_active_project(ctx)
         dir_path = _resolve_or_raise(root, path)
         if not dir_path.exists() or not dir_path.is_dir():
             raise ToolError(f"Not a directory: {path}")

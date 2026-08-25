@@ -31,15 +31,9 @@ def register(mcp):
 
         Only folders explicitly registered on the local machine (via
         `claudeaibridge add-project`) appear here — call select_project with
-        one of these names before using any file or shell tool.
+        one of these paths before using any file or shell tool.
         """
-        projects = registry.list_projects()
-        return {
-            "projects": [
-                {"name": name, "path": info["path"]}
-                for name, info in sorted(projects.items())
-            ]
-        }
+        return {"projects": sorted(registry.list_projects())}
 
     @mcp.tool(
         name="select_project",
@@ -52,16 +46,16 @@ def register(mcp):
         },
     )
     async def select_project(
-        name: Annotated[
+        path: Annotated[
             str,
-            Field(description="The project name, as returned by list_projects."),
+            Field(description="The project's path, as returned by list_projects."),
         ],
         ctx: Context,
     ) -> dict:
         """
-        Make `name` the active project for the rest of this session. All
+        Make `path` the active project for the rest of this session. All
         subsequent file and shell tool calls in this session are scoped to
         that project's folder until select_project is called again.
         """
-        path = await session.set_active_project(ctx, name)
-        return {"selected": name, "path": path}
+        resolved = await session.set_active_project(ctx, path)
+        return {"selected": resolved}

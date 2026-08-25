@@ -39,6 +39,23 @@ def _ask_yes_no(prompt: str, default_yes: bool) -> bool:
     return value.startswith("y")
 
 
+def _step_public_url():
+    """Returns (use_ngrok: bool, base_url: str | None). Someone who already
+    has their own way of exposing this machine publicly (a domain + reverse
+    proxy, an already-running tunnel) shouldn't be pushed through ngrok
+    setup at all."""
+    print("\n--- Public URL ---")
+    if _ask_yes_no(
+        "Do you already have your own domain or tunnel pointed at this machine?",
+        default_yes=False,
+    ):
+        base_url = _ask("Public URL claude.ai should use to reach this server (e.g. https://your-domain.example)")
+        if base_url:
+            return False, base_url
+        print("No URL given — falling back to ngrok.")
+    return True, None
+
+
 def _step_authtoken() -> bool:
     print("\n--- ngrok authtoken ---")
     existing = tunnel.get_authtoken()
@@ -65,19 +82,19 @@ def _step_projects() -> bool:
     existing = registry.list_projects()
     if existing:
         print("Already registered:")
-        for name, info in sorted(existing.items()):
-            print(f"  {name} -> {info['path']}")
+        for path in sorted(existing):
+            print(f"  {path}")
         if not _ask_yes_no("Register another project?", default_yes=False):
             return True
 
     print("Pick the folder(s) claude.ai should be able to work in.")
     for path in picker.prompt_for_projects(str(Path.home())):
         try:
-            name = registry.add_project(path)
+            resolved = registry.add_project(path)
         except (NotADirectoryError, FileNotFoundError) as e:
             print(f"  error: {e}")
             continue
-        print(f"  Registered '{name}' -> {registry.get_project_path(name)}")
+        print(f"  Registered {resolved}")
 
     return bool(registry.list_projects())
 
@@ -90,17 +107,18 @@ def run() -> int:
         "project folders you explicitly choose on this machine."
     )
 
-    if not _step_authtoken():
+    use_ngrok, base_url = _step_public_url()
+    if use_ngrok and not _step_authtoken():
         return 1
     if not _step_projects():
         print(
             "\nNo projects registered. You need at least one before starting "
             "the server — run `claudeaibridge add-project <path>` and then "
-            "`claudeaibridge serve --ngrok`."
+            "`claudeaibridge serve" + (" --ngrok" if use_ngrok else f" --base-url {base_url}") + "`."
         )
         return 1
 
     print("\n--- Starting server ---")
     from .cli import run_server
 
-    return run_server(host="127.0.0.1", port=8420, use_ngrok=True, base_url=None, no_auth=False)
+    return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=False)

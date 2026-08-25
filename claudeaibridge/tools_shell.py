@@ -576,7 +576,7 @@ def register(mcp):
           backgrounded   — outran the wait window; still running as a job.
           error          — could not be launched.
         """
-        _, root = await session.get_active_project(ctx)
+        root = await session.get_active_project(ctx)
         return await _run_command(command, timeout, root)
 
     @mcp.tool(

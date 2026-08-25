@@ -1,26 +1,69 @@
 import argparse
 import sys
+from pathlib import Path
 from typing import Optional
 
 from . import registry
 
 
 def _cmd_add_project(args) -> int:
-    try:
-        name = registry.add_project(args.path, name=args.name)
-    except (NotADirectoryError, FileNotFoundError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
-    print(f"Registered '{name}' -> {registry.get_project_path(name)}")
+    if args.path:
+        try:
+            resolved = registry.add_project(args.path)
+        except (NotADirectoryError, FileNotFoundError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(f"Registered {resolved}")
+        return 0
+
+    from . import picker
+
+    selected = picker.prompt_for_projects(str(Path.home()))
+    if not selected:
+        print("No folders selected.")
+        return 0
+    for p in selected:
+        try:
+            resolved = registry.add_project(p)
+            print(f"Registered {resolved}")
+        except (NotADirectoryError, FileNotFoundError) as e:
+            print(f"error: {e}", file=sys.stderr)
     return 0
 
 
-def _cmd_remove_project(args) -> int:
-    if registry.remove_project(args.name):
-        print(f"Removed '{args.name}'.")
+def _cmd_edit_project(args) -> int:
+    if args.path:
+        if registry.remove_project(args.path):
+            print(f"Removed {args.path}")
+            return 0
+        print(f"error: '{args.path}' is not registered.", file=sys.stderr)
+        return 1
+
+    if not sys.stdin.isatty():
+        print(
+            "Interactive editing needs a real terminal. To remove one project "
+            "directly: claudeaibridge edit-project <path>",
+            file=sys.stderr,
+        )
+        return 1
+
+    from . import picker
+
+    before = set(registry.list_projects())
+    if not before:
+        print("No projects registered yet. Use `claudeaibridge add-project` first.")
         return 0
-    print(f"error: no project named '{args.name}'", file=sys.stderr)
-    return 1
+
+    after = set(picker.pick_folders(str(Path.home()), initial_selected=before))
+    for p in sorted(after - before):
+        registry.add_project(p)
+        print(f"Added {p}")
+    for p in sorted(before - after):
+        registry.remove_project(p)
+        print(f"Removed {p}")
+    if after == before:
+        print("No changes.")
+    return 0
 
 
 def _cmd_list_projects(_args) -> int:
@@ -28,8 +71,8 @@ def _cmd_list_projects(_args) -> int:
     if not projects:
         print("No projects registered. Add one with: claudeaibridge add-project <path>")
         return 0
-    for name, info in sorted(projects.items()):
-        print(f"{name}\t{info['path']}")
+    for path in sorted(projects):
+        print(path)
     return 0
 
 
@@ -64,6 +107,12 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
     print(f"  {connector_url}")
     print("=" * 60)
     print()
+    # Explicit flush: stdout is fully buffered (not line-buffered) whenever
+    # it isn't a live terminal — piped, redirected to a file, captured by a
+    # process supervisor — and server.run_http() below blocks forever, so
+    # without this the most important line we print could just sit in the
+    # buffer and never actually reach the reader.
+    sys.stdout.flush()
 
     try:
         server.run_http(host=host, port=port, auth_provider=auth_provider)
@@ -112,13 +161,12 @@ def main() -> None:
     p_init.set_defaults(func=_cmd_init)
 
     p_add = sub.add_parser("add-project", help="Register a folder as an allowed project.")
-    p_add.add_argument("path", help="Path to the project folder.")
-    p_add.add_argument("--name", default=None, help="Name to register it under (default: folder name).")
+    p_add.add_argument("path", nargs="?", default=None, help="Path to the project folder. Omit to pick one (or several) with the interactive folder browser.")
     p_add.set_defaults(func=_cmd_add_project)
 
-    p_remove = sub.add_parser("remove-project", help="Unregister a project.")
-    p_remove.add_argument("name")
-    p_remove.set_defaults(func=_cmd_remove_project)
+    p_edit = sub.add_parser("edit-project", help="Add/remove registered projects.")
+    p_edit.add_argument("path", nargs="?", default=None, help="Path to unregister directly. Omit to open the interactive browser, pre-checked with everything currently registered — check/uncheck anything to add or remove it.")
+    p_edit.set_defaults(func=_cmd_edit_project)
 
     p_list = sub.add_parser("list-projects", help="List registered projects.")
     p_list.set_defaults(func=_cmd_list_projects)

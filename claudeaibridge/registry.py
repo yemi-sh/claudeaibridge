@@ -7,6 +7,10 @@ claude.ai) can only ever pick from folders that already appear here — it has
 no way to add a new one. Only a person with a terminal on this machine can
 grow the list, via the CLI (`claudeaibridge add-project`).
 
+A project's identity is its resolved absolute path — nothing else. No
+separate name/label: two folders can share a basename without any
+collision-handling nonsense, because the path itself is already unique.
+
 Stored as a small JSON file so the CLI (writer) and the running server
 (reader) never need to coordinate directly: the server just re-reads this
 file on every `list_projects` call, so edits show up immediately with no
@@ -17,7 +21,6 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 
 def config_dir() -> Path:
@@ -53,19 +56,20 @@ def _save(data: dict) -> None:
 
 
 def list_projects() -> dict:
-    """name -> {"path": str, "added_at": iso-str}, freshly read from disk."""
+    """resolved path (str) -> {"added_at": iso-str}, freshly read from disk."""
     return _load()["projects"]
 
 
-def get_project_path(name: str) -> Optional[str]:
-    return list_projects().get(name, {}).get("path")
+def is_registered(path: str) -> bool:
+    resolved = str(Path(path).expanduser().resolve())
+    return resolved in list_projects()
 
 
-def add_project(path: str, name: Optional[str] = None) -> str:
+def add_project(path: str) -> str:
     """
-    Register a folder as an allowed project root. Returns the name it was
-    registered under (auto-derived from the folder name if not given, with a
-    numeric suffix on collision).
+    Register a folder as an allowed project root. Returns its resolved
+    absolute path (also the registry key). Adding an already-registered
+    folder is a no-op that just returns its path — not an error.
 
     Resolves symlinks (`Path.resolve()` with strict=True) so the stored path
     is the real on-disk location, not a symlink that could later be
@@ -76,32 +80,20 @@ def add_project(path: str, name: Optional[str] = None) -> str:
         raise NotADirectoryError(f"Not a directory: {resolved}")
 
     data = _load()
-    projects = data["projects"]
-
-    base_name = name or resolved.name
-    candidate = base_name
-    n = 2
-    existing_paths = {v["path"] for v in projects.values()}
-    if str(resolved) in existing_paths:
-        for existing_name, v in projects.items():
-            if v["path"] == str(resolved):
-                return existing_name
-    while candidate in projects:
-        candidate = f"{base_name}-{n}"
-        n += 1
-
-    projects[candidate] = {
-        "path": str(resolved),
-        "added_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-    }
-    _save(data)
-    return candidate
+    key = str(resolved)
+    if key not in data["projects"]:
+        data["projects"][key] = {"added_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        _save(data)
+    return key
 
 
-def remove_project(name: str) -> bool:
+def remove_project(path: str) -> bool:
+    # Not strict: removing the registry entry for a folder that was already
+    # deleted from disk should still work.
+    resolved = str(Path(path).expanduser().resolve())
     data = _load()
-    if name in data["projects"]:
-        del data["projects"][name]
+    if resolved in data["projects"]:
+        del data["projects"][resolved]
         _save(data)
         return True
     return False
