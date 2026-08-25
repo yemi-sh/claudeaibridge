@@ -48,10 +48,11 @@ instead of plain text — clicking an entry calls `select_project` for you. On a
 host without widget support it degrades automatically to the same plain project
 list `list_projects` returns, so it's always safe to call either way.
 
-After an edit, Claude can also call `show_diff` (passing `file_edit`'s own
-`diff` field) to render the change as a proper highlighted diff instead of raw
-unified-diff text. `file_edit`'s own result is unaffected either way — `show_diff`
-is a purely visual add-on, not a replacement for it.
+`file_write` and `file_edit` do the same automatically — on hosts that support
+it, every successful edit (and a failed one, with the reason why) is shown as a
+rendered diff right there, no extra step required. Claude still gets the exact
+same result data either way (what changed, backup path, error details) — the
+widget is a rendering of that same data, not a replacement for it.
 
 ## Platform support
 
@@ -207,8 +208,8 @@ python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN se
 - The launchd (macOS) path for the background service is implemented but
   unverified — it was built and tested only on Linux (systemd), since that's the
   only platform available during development.
-- Two widgets so far: `browse_projects` (clickable project picker) and
-  `show_diff` (highlighted diff view after a `file_edit`).
+- Widgets so far: `browse_projects` (clickable project picker), and
+  `file_write`/`file_edit` rendering their own change as a diff.
 
 ## License
 

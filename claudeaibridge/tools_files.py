@@ -21,9 +21,10 @@ from typing import Annotated, Any, List, Optional, Tuple
 
 from fastmcp import Context
 from fastmcp.exceptions import ToolError
+from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from prefab_ui.components import Code, Column, Heading
+from prefab_ui.components import Code, Column, Heading, Text
 
 from . import audit, session
 from .paths import PathEscapesProject, resolve_within
@@ -152,9 +153,24 @@ def _write_backup(root: str, file_path: Path, content: str, reason: str) -> dict
     return {"backup_path": str(backup_path), "backup_id": timestamp, "backup_reason": reason}
 
 
+def _diff_view(title: str, diff_text: str):
+    with Column(gap=8) as view:
+        Heading(title)
+        Code(diff_text, language="diff")
+    return view
+
+
+def _message_view(title: str, message: str):
+    with Column(gap=8) as view:
+        Heading(title)
+        Text(message)
+    return view
+
+
 def register(mcp):
     @mcp.tool(
         name="file_write",
+        app=True,
         annotations={
             "title": "Write File",
             "readOnlyHint": False,
@@ -168,13 +184,20 @@ def register(mcp):
         content: Annotated[str, Field(description="Complete file content to write.")],
         reason: Annotated[str, Field(description="Why this file is being created/overwritten.")],
         ctx: Context,
-    ) -> dict:
+    ) -> ToolResult:
         """Create a new file or completely overwrite an existing one. For small
-        edits to an existing file, prefer file_edit — it keeps a backup."""
+        edits to an existing file, prefer file_edit — it keeps a backup. On
+        hosts that support it, the change is also shown as a rendered diff."""
         root = await session.get_active_project(ctx)
         file_path = _resolve_or_raise(root, path)
 
         was_overwrite = file_path.exists() and file_path.is_file()
+        old_content: Optional[str] = None
+        if was_overwrite:
+            try:
+                old_content = file_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                pass  # binary/non-UTF-8 file being overwritten — no diff to show
         file_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             content.encode("utf-8")
@@ -184,7 +207,7 @@ def register(mcp):
         file_path.write_text(content, encoding="utf-8")
         operation = "overwrite" if was_overwrite else "create"
         audit.log(root, "file_write", f"{operation} {file_path} — {reason}")
-        return {
+        result = {
             "success": True,
             "path": str(file_path),
             "reason": reason,
@@ -192,9 +215,15 @@ def register(mcp):
             "lines_written": len(content.split("\n")),
             "chars_written": len(content),
         }
+        if old_content is None and was_overwrite:
+            return ToolResult(content=result)
+        diff = _generate_diff(old_content or "", content, file_path.name)
+        result["diff"] = diff
+        return ToolResult(content=result, structured_content=_diff_view(file_path.name, diff))
 
     @mcp.tool(
         name="file_edit",
+        app=True,
         annotations={
             "title": "Edit File",
             "readOnlyHint": False,
@@ -212,10 +241,11 @@ def register(mcp):
         occurrence: Annotated[Optional[Any], Field(description="Which match to replace: a number, a list of numbers, or 'all'. Required if old_content matches more than once.")] = None,
         replacements: Annotated[Optional[List[dict]], Field(description="Multiple {old_content, new_content, occurrence} replacements in one call, as an alternative to old_content/new_content.")] = None,
         normalize_whitespace: Annotated[bool, Field(description="Ignore leading/trailing whitespace when matching.")] = True,
-    ) -> dict:
+    ) -> ToolResult:
         """Search-and-replace edit of an existing file. A backup of the file's
         prior content is written under .claudeaibridge/backups/ before any
-        change is applied, so an edit can always be undone by hand."""
+        change is applied, so an edit can always be undone by hand. On hosts
+        that support it, the change is also shown as a rendered diff."""
         if replacements is None and (old_content is None or new_content is None):
             raise ToolError("Provide either old_content+new_content, or a replacements list.")
         if replacements is not None and (old_content is not None or new_content is not None):
@@ -242,40 +272,15 @@ def register(mcp):
             backup = _write_backup(root, file_path, current_content, reason)
             result["reason"] = reason
             result.update(backup)
-            result["diff"] = _generate_diff(current_content, new_content_written, file_path.name)
+            diff = _generate_diff(current_content, new_content_written, file_path.name)
+            result["diff"] = diff
             audit.log(root, "file_edit", f"edit {file_path} — {reason}")
+            return ToolResult(content=result, structured_content=_diff_view(file_path.name, diff))
         else:
             result.pop("_new_content", None)
-            audit.log(root, "file_edit", f"FAILED {file_path} — {result.get('error', 'unknown error')}")
-        return result
-
-    @mcp.tool(
-        name="show_diff",
-        app=True,
-        annotations={
-            "title": "Show Diff",
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    )
-    async def show_diff(
-        diff: Annotated[str, Field(description="Unified diff text, as returned in file_edit's `diff` field.")],
-        path: Annotated[Optional[str], Field(description="The file path the diff is for, shown as a heading.")] = None,
-    ):
-        """
-        Render a unified diff visually for the user, instead of them reading
-        raw diff text. Call this right after a successful file_edit, passing
-        its `diff` field — in addition to, never instead of, reporting the
-        file_edit result itself. On a host without widget support this has
-        no useful plain-text fallback, so don't rely on it for anything the
-        user needs to see unconditionally.
-        """
-        with Column(gap=8) as view:
-            Heading(path or "Diff")
-            Code(diff, language="diff")
-        return view
+            error = result.get("error", "unknown error")
+            audit.log(root, "file_edit", f"FAILED {file_path} — {error}")
+            return ToolResult(content=result, structured_content=_message_view(file_path.name, error))
 
     @mcp.tool(
         name="file_trash",

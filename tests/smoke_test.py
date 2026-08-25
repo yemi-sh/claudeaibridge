@@ -52,29 +52,46 @@ async def main():
 
                 await call(client, "file_enum", path=".")
 
-                await call(client, "file_write", path="new_file.py",
-                            content="def greet():\n    print('hi')\n",
-                            reason="smoke test create")
-
-                edit_result = await call(client, "file_edit", path="new_file.py",
-                            old_content="print('hi')", new_content="print('hello')",
-                            reason="smoke test edit")
-
-                # Widget: show_diff should carry a UI resource, degrade to
-                # plain text for non-widget clients, and its structured
-                # content should embed the same diff text file_edit returned.
+                # Widget: file_write and file_edit should both carry a UI
+                # resource, still return the same plain dict data they always
+                # did (for non-widget hosts and for Claude's own reasoning),
+                # and their structured content should embed a rendered diff
+                # matching the same `diff` field in that data — no separate
+                # tool call needed to see it.
                 tools = await client.list_tools()
-                sd_tool = next(t for t in tools if t.name == "show_diff")
-                assert sd_tool.meta and "ui" in sd_tool.meta, "show_diff should carry _meta.ui"
-                diff_widget_result = await client.call_tool(
-                    "show_diff", {"diff": edit_result["diff"], "path": "new_file.py"}
-                )
-                assert diff_widget_result.content and diff_widget_result.content[0].text, \
-                    "show_diff should still return plain text content"
-                code_block = diff_widget_result.structured_content["view"]["children"][0]["children"][1]
-                assert code_block["type"] == "Code" and code_block["content"] == edit_result["diff"]
-                print("\n>>> show_diff widget: UI meta present, degrades to text, "
-                      "diff content wired correctly")
+                for name in ("file_write", "file_edit"):
+                    t = next(t for t in tools if t.name == name)
+                    assert t.meta and "ui" in t.meta, f"{name} should carry _meta.ui"
+
+                # Note: with structured_content carrying the Prefab widget
+                # tree, the plain result data lives in `content` (what
+                # Claude actually reads), not `.data`/`structured_content`
+                # anymore — parse it out the same way a non-widget host would.
+                write_result = await client.call_tool("file_write", {
+                    "path": "new_file.py",
+                    "content": "def greet():\n    print('hi')\n",
+                    "reason": "smoke test create",
+                })
+                write_data = json.loads(write_result.content[0].text)
+                print(f"\n>>> file_write(...)\n{json.dumps(write_data, indent=2, default=str)}")
+                assert write_data["success"] is True
+                assert "diff" in write_data
+                code_block = write_result.structured_content["view"]["children"][0]["children"][1]
+                assert code_block["type"] == "Code" and code_block["content"] == write_data["diff"]
+
+                edit_result = await client.call_tool("file_edit", {
+                    "path": "new_file.py",
+                    "old_content": "print('hi')",
+                    "new_content": "print('hello')",
+                    "reason": "smoke test edit",
+                })
+                edit_data = json.loads(edit_result.content[0].text)
+                print(f"\n>>> file_edit(...)\n{json.dumps(edit_data, indent=2, default=str)}")
+                assert edit_data["success"] is True
+                code_block = edit_result.structured_content["view"]["children"][0]["children"][1]
+                assert code_block["type"] == "Code" and code_block["content"] == edit_data["diff"]
+                print("\n>>> file_write/file_edit widgets: UI meta present, plain dict data "
+                      "intact, diff rendered inline with the same content")
 
                 await call(client, "shell_execute", command="cat new_file.py && pwd")
 
