@@ -40,6 +40,14 @@ computer. The design leans hard on containment rather than trust:
   `<project>/.claudeaibridge/audit.log` in plain text — always answerable: "what did
   Claude actually do here?"
 
+## Interactive widgets
+
+Ask Claude to "show my projects" or "let me pick a project" and, on hosts that
+support it, `browse_projects` renders as an actual clickable list in the chat
+instead of plain text — clicking an entry calls `select_project` for you. On a
+host without widget support it degrades automatically to the same plain project
+list `list_projects` returns, so it's always safe to call either way.
+
 ## Platform support
 
 Linux and macOS. Windows is not supported yet (the sandboxing approach doesn't have a
@@ -110,7 +118,8 @@ claudeaibridge list-projects                # print all registered paths
 ```
 
 A project's identity is its resolved filesystem path — there's no separate name to
-remember.
+remember. In chat, Claude can also show these as a clickable widget instead of a
+plain list — see [Interactive widgets](#interactive-widgets).
 
 ### `claudeaibridge serve`
 
@@ -187,8 +196,8 @@ python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN se
 - The launchd (macOS) path for the background service is implemented but
   unverified — it was built and tested only on Linux (systemd), since that's the
   only platform available during development.
-- No interactive claude.ai-side widgets yet (a project picker, diff previews) —
-  tool calls render as claude.ai's standard tool-call cards for now.
+- Only one widget so far (`browse_projects`, a clickable project picker) — a
+  diff-preview widget for `file_edit` is a natural next one but isn't built yet.
 
 ## License
 

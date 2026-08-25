@@ -10,6 +10,9 @@ from typing import Annotated
 from fastmcp import Context
 from pydantic import Field
 
+from prefab_ui.actions import CallTool
+from prefab_ui.components import Button, Column, Heading, Text
+
 from . import registry
 from . import session
 
@@ -59,3 +62,36 @@ def register(mcp):
         """
         resolved = await session.set_active_project(ctx, path)
         return {"selected": resolved}
+
+    @mcp.tool(
+        name="browse_projects",
+        app=True,
+        annotations={
+            "title": "Browse Projects",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
+    async def browse_projects():
+        """
+        Show an interactive, clickable list of registered projects for the
+        user to browse and pick from directly. Use this when the user wants
+        to see or choose visually (e.g. "show me my projects", "let me
+        pick") — for just getting the list of paths for your own reasoning,
+        use list_projects instead. On a host without widget support this
+        still returns the plain list, so it's always safe to call.
+        """
+        projects = sorted(registry.list_projects())
+        with Column(gap=8) as view:
+            Heading("Registered projects")
+            if not projects:
+                Text("No projects registered yet — run `claudeaibridge add-project` on the host machine.")
+            for path in projects:
+                Button(
+                    path,
+                    variant="outline",
+                    on_click=CallTool(select_project, arguments={"path": path}),
+                )
+        return view

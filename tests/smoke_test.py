@@ -32,6 +32,24 @@ async def main():
                 await call(client, "list_projects")
                 await call(client, "select_project", path=project_path)
 
+                # Widget: browse_projects should carry a UI resource, degrade
+                # to plain text for non-widget clients, and its structured
+                # content should wire a real, callable select_project action.
+                tools = await client.list_tools()
+                bp_tool = next(t for t in tools if t.name == "browse_projects")
+                assert bp_tool.meta and "ui" in bp_tool.meta, "browse_projects should carry _meta.ui"
+                widget_result = await client.call_tool("browse_projects", {})
+                assert widget_result.content and widget_result.content[0].text, \
+                    "browse_projects should still return plain text content"
+                buttons = widget_result.structured_content["view"]["children"][0]["children"][1:]
+                action = next(
+                    b["onClick"] for b in buttons
+                    if b["onClick"]["arguments"]["path"] == project_path
+                )
+                assert action["tool"] == "select_project"
+                print("\n>>> browse_projects widget: UI meta present, degrades to text, "
+                      "select_project action wired correctly")
+
                 await call(client, "file_enum", path=".")
 
                 await call(client, "file_write", path="new_file.py",
