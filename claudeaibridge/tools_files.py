@@ -20,11 +20,13 @@ from pathlib import Path
 from typing import Annotated, Any, List, Optional, Tuple
 
 from fastmcp import Context
+from fastmcp.apps.config import PrefabAppConfig
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from prefab_ui.components import Column, Text
+from prefab_ui import PrefabApp
+from prefab_ui.components import Accordion, AccordionItem, Column, Text
 
 from . import audit, session
 from .paths import PathEscapesProject, resolve_within
@@ -167,30 +169,36 @@ def _diff_line_style(line: str) -> str:
     return "text-muted-foreground"
 
 
-def _diff_view(title: str, diff_text: str):
-    with Column(gap=6) as view:
-        Text(title, bold=True, code=True, css_class="text-sm")
-        with Column(
-            gap=0,
-            css_class="font-mono text-xs leading-5 whitespace-pre overflow-x-auto "
-                      "max-h-64 overflow-y-auto rounded-md border border-border p-2",
-        ):
-            for line in diff_text.splitlines():
-                Text(line or " ", css_class=_diff_line_style(line))
-    return view
+# Zeroes out the renderer's default 1.5rem padding around the whole widget
+# (".pf-app-root { padding: calc(var(--spacing) * 6) }") — collapsed by
+# default via Accordion so the diff doesn't take up chat space unasked.
+_APP_CSS_CLASS = "p-2"
 
 
-def _message_view(title: str, message: str):
-    with Column(gap=6) as view:
-        Text(title, bold=True, code=True, css_class="text-sm")
-        Text(message, css_class="text-sm text-muted-foreground")
-    return view
+def _diff_view(title: str, diff_text: str) -> PrefabApp:
+    with Accordion() as view:
+        with AccordionItem(title):
+            with Column(
+                gap=0,
+                css_class="font-mono text-xs leading-5 whitespace-pre overflow-x-auto "
+                          "max-h-56 overflow-y-auto rounded-md border border-border p-2",
+            ):
+                for line in diff_text.splitlines():
+                    Text(line or " ", css_class=_diff_line_style(line))
+    return PrefabApp(view=view, css_class=_APP_CSS_CLASS)
+
+
+def _message_view(title: str, message: str) -> PrefabApp:
+    with Accordion() as view:
+        with AccordionItem(title):
+            Text(message, css_class="text-sm text-muted-foreground")
+    return PrefabApp(view=view, css_class=_APP_CSS_CLASS)
 
 
 def register(mcp):
     @mcp.tool(
         name="file_write",
-        app=True,
+        app=PrefabAppConfig(prefers_border=False),
         annotations={
             "title": "Write File",
             "readOnlyHint": False,
@@ -243,7 +251,7 @@ def register(mcp):
 
     @mcp.tool(
         name="file_edit",
-        app=True,
+        app=PrefabAppConfig(prefers_border=False),
         annotations={
             "title": "Edit File",
             "readOnlyHint": False,

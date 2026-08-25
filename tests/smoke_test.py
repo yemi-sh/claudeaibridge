@@ -53,8 +53,16 @@ async def main():
                     "content": "def greet():\n    print('hi')\n",
                     "reason": "smoke test create",
                 })
+
                 def diff_lines_from_widget(result):
-                    diff_col = result.structured_content["view"]["children"][0]["children"][1]
+                    # Div(pf-app-root) > Accordion > AccordionItem > Column(diff lines)
+                    root = result.structured_content["view"]
+                    assert root["cssClass"] == "pf-app-root p-2"
+                    accordion = root["children"][0]
+                    assert accordion["type"] == "Accordion"
+                    item = accordion["children"][0]
+                    assert item["type"] == "AccordionItem"
+                    diff_col = item["children"][0]
                     assert diff_col["type"] == "Column"
                     return [c["content"] for c in diff_col["children"]]
 
