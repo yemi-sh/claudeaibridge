@@ -14,7 +14,10 @@ configured and lets you keep it or change it, rather than forcing you
 through the whole thing again.
 """
 
+import sys
 from pathlib import Path
+
+import questionary
 
 from . import picker, registry, tunnel
 
@@ -40,20 +43,41 @@ def _ask_yes_no(prompt: str, default_yes: bool) -> bool:
 
 
 def _step_public_url():
-    """Returns (use_ngrok: bool, base_url: str | None). Someone who already
-    has their own way of exposing this machine publicly (a domain + reverse
-    proxy, an already-running tunnel) shouldn't be pushed through ngrok
-    setup at all."""
+    """Returns (use_ngrok: bool, base_url: str | None, no_auth: bool)."""
     print("\n--- Public URL ---")
-    if _ask_yes_no(
-        "Do you already have your own domain or tunnel pointed at this machine?",
-        default_yes=False,
-    ):
+
+    if not sys.stdin.isatty():
+        return True, None, False  # non-interactive: default to ngrok
+
+    choice = questionary.select(
+        "How should claude.ai reach this machine?",
+        choices=[
+            questionary.Choice(
+                title="ngrok — I don't have a domain or tunnel of my own (recommended)",
+                value="ngrok",
+            ),
+            questionary.Choice(
+                title="My own domain/tunnel — already pointed at this machine",
+                value="own",
+            ),
+            questionary.Choice(
+                title="Local only — no public access, just testing on this machine",
+                value="local",
+            ),
+        ],
+    ).ask()
+
+    if choice == "own":
         base_url = _ask("Public URL claude.ai should use to reach this server (e.g. https://your-domain.example)")
         if base_url:
-            return False, base_url
+            return False, base_url, False
         print("No URL given — falling back to ngrok.")
-    return True, None
+        return True, None, False
+
+    if choice == "local":
+        return False, None, True
+
+    return True, None, False
 
 
 def _step_authtoken() -> bool:
@@ -107,18 +131,23 @@ def run() -> int:
         "project folders you explicitly choose on this machine."
     )
 
-    use_ngrok, base_url = _step_public_url()
+    use_ngrok, base_url, no_auth = _step_public_url()
     if use_ngrok and not _step_authtoken():
         return 1
     if not _step_projects():
+        if use_ngrok:
+            next_cmd = "claudeaibridge serve --ngrok"
+        elif base_url:
+            next_cmd = f"claudeaibridge serve --base-url {base_url}"
+        else:
+            next_cmd = "claudeaibridge serve --no-auth"
         print(
             "\nNo projects registered. You need at least one before starting "
-            "the server — run `claudeaibridge add-project <path>` and then "
-            "`claudeaibridge serve" + (" --ngrok" if use_ngrok else f" --base-url {base_url}") + "`."
+            f"the server — run `claudeaibridge add-project <path>` and then `{next_cmd}`."
         )
         return 1
 
     print("\n--- Starting server ---")
     from .cli import run_server
 
-    return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=False)
+    return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
