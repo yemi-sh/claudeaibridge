@@ -72,7 +72,7 @@ def main() -> int:
         registered_path = str(Path(tmp_project).resolve())
 
         proc = subprocess.Popen(
-            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--port", str(PORT)],
+            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--foreground", "--port", str(PORT)],
             env=env,
         )
         try:
@@ -160,7 +160,7 @@ def main() -> int:
             proc.wait(timeout=5)
 
         proc2 = subprocess.Popen(
-            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--port", str(PORT)],
+            [sys.executable, "-m", "claudeaibridge.cli", "serve", "--foreground", "--port", str(PORT)],
             env=env,
         )
         try:

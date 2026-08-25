@@ -18,7 +18,6 @@ through the whole thing again.
 """
 
 import sys
-import time
 from pathlib import Path
 
 import pyfiglet
@@ -237,7 +236,7 @@ def run() -> int:
 
     print(tc.header("\n--- Starting server ---"))
 
-    serve_args = []
+    serve_args = ["--host", "127.0.0.1", "--port", "8420"]
     if use_ngrok:
         serve_args.append("--ngrok")
     if base_url:
@@ -245,35 +244,7 @@ def run() -> int:
     if no_auth:
         serve_args.append("--no-auth")
 
-    from . import service
+    from .cli import install_and_wait
 
-    try:
-        service_path = service.install(serve_args)
-    except Exception as e:
-        print(tc.hint(f"Could not run as a background service ({e}) — running in the foreground instead."))
-        from .cli import run_server
-
-        return run_server(host="127.0.0.1", port=8420, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
-
-    print(tc.success(f"Installed and running in the background: {service_path}"))
-    print("Waiting for it to come up...")
-
-    registry.clear_connector_url()
-    url = None
-    for _ in range(20):
-        url = registry.read_connector_url()
-        if url:
-            break
-        time.sleep(0.5)
-
-    if url:
-        print()
-        print(tc.header("=" * 60))
-        print("Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
-        print(f"  {tc.accent(url)}")
-        print(tc.header("=" * 60))
-    else:
-        print(tc.error("Could not confirm the server started — check `claudeaibridge status`."))
-
-    print(tc.hint("\nIt'll keep running in the background. Check on it anytime with: claudeaibridge status"))
-    return 0
+    return install_and_wait(serve_args, host="127.0.0.1", port=8420,
+                             use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)

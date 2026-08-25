@@ -135,8 +135,10 @@ plain list — see [Interactive widgets](#interactive-widgets).
 
 ### `claudeaibridge serve`
 
-Runs the MCP server directly (`init` calls into this at the end; use this to restart
-without going through the wizard again).
+Installs/starts the MCP server as the background service with whatever flags you
+give it (`init` calls into this same path at the end of the wizard) and returns —
+it doesn't block your terminal. If the background service is already running,
+`serve` just reports its connector URL instead of reinstalling it.
 
 | Flag | Meaning |
 |---|---|
@@ -144,14 +146,15 @@ without going through the wizard again).
 | `--base-url <url>` | The public URL claude.ai should use — for your own domain/tunnel instead of ngrok. Overridden automatically when `--ngrok` is used. |
 | `--no-auth` | Disable OAuth. **Local testing only** — never combine with a public tunnel. |
 | `--host` / `--port` | Where the local server listens (default `127.0.0.1:8420`). |
-| `--transport stdio` | Talk over stdin/stdout instead of HTTP, for a local MCP client (e.g. Claude Desktop) on this same machine — no network, no tunnel, no OAuth. |
+| `--transport stdio` | Talk over stdin/stdout instead of HTTP, for a local MCP client (e.g. Claude Desktop) on this same machine — no network, no tunnel, no OAuth, no background service either. |
+| `--foreground` | Run right here in this terminal instead of installing/using the background service — useful for watching logs live or quick debugging. If the background service is currently running, it's stopped first so the port is free. |
 
 Examples:
 
 ```bash
-claudeaibridge serve --ngrok                                    # the normal path
+claudeaibridge serve --ngrok                                    # install+start as a service
 claudeaibridge serve --base-url https://your-domain.example     # bring your own tunnel
-claudeaibridge serve --no-auth                                  # local-only testing
+claudeaibridge serve --no-auth --foreground                     # local-only testing, blocking
 claudeaibridge serve --transport stdio                          # local MCP client
 ```
 

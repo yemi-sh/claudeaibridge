@@ -52,7 +52,7 @@ def _systemd_unit_path() -> Path:
 
 
 def _install_linux(serve_args: List[str]) -> str:
-    argv = _executable_argv() + ["serve"] + serve_args
+    argv = _executable_argv() + ["serve", "--foreground"] + serve_args
     env_lines = "".join(f"Environment={k}={v}\n" for k, v in _env_overrides().items())
     unit = f"""[Unit]
 Description=claudeaibridge - claude.ai coding agent bridge
@@ -99,7 +99,7 @@ def _launchd_plist_path() -> Path:
 
 
 def _install_macos(serve_args: List[str]) -> str:
-    argv = _executable_argv() + ["serve"] + serve_args
+    argv = _executable_argv() + ["serve", "--foreground"] + serve_args
     log_path = Path.home() / "Library" / "Logs" / "claudeaibridge.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     args_xml = "\n".join(f"        <string>{a}</string>" for a in argv)

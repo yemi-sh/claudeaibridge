@@ -1,5 +1,6 @@
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -128,13 +129,84 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
     return 0
 
 
+def install_and_wait(serve_args: list, *, host: str, port: int, use_ngrok: bool,
+                      base_url: Optional[str], no_auth: bool) -> int:
+    """Install serve_args as the background service and report the connector
+    URL once it comes up. Falls back to running in the foreground right here
+    if the platform has no service manager. Shared by `init` and `serve`."""
+    from . import service
+
+    try:
+        service_path = service.install(serve_args)
+    except Exception as e:
+        print(tc.hint(f"Could not run as a background service ({e}) — running in the foreground instead."))
+        return run_server(host=host, port=port, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
+
+    print(tc.success(f"Installed and running in the background: {service_path}"))
+    print("Waiting for it to come up...")
+
+    registry.clear_connector_url()
+    url = None
+    for _ in range(20):
+        url = registry.read_connector_url()
+        if url:
+            break
+        time.sleep(0.5)
+
+    if url:
+        print()
+        print(tc.header("=" * 60))
+        print("Connector URL for claude.ai (Settings -> Connectors -> Add custom connector):")
+        print(f"  {tc.accent(url)}")
+        print(tc.header("=" * 60))
+    else:
+        print(tc.error("Could not confirm the server started — check `claudeaibridge status`."))
+        return 1
+
+    print(tc.hint("\nIt'll keep running in the background. Check on it anytime with: claudeaibridge status"))
+    return 0
+
+
 def _cmd_serve(args) -> int:
     if args.transport == "stdio":
         from . import server
 
         server.run_stdio()
         return 0
-    return run_server(args.host, args.port, args.ngrok, args.base_url, args.no_auth)
+
+    from . import service
+
+    try:
+        active = service.is_active()
+    except RuntimeError:
+        active = None
+
+    if args.foreground:
+        if active:
+            print(tc.hint("Stopping the background service so this can run in the foreground..."))
+            service.uninstall()
+            registry.clear_connector_url()
+        return run_server(args.host, args.port, args.ngrok, args.base_url, args.no_auth)
+
+    if active:
+        print(tc.success("Background service already running."))
+        url = registry.read_connector_url()
+        if url:
+            print(f"Connector URL: {tc.accent(url)}")
+        else:
+            print(tc.hint("No connector URL recorded yet — check `claudeaibridge status`."))
+        return 0
+
+    serve_args = ["--host", args.host, "--port", str(args.port)]
+    if args.ngrok:
+        serve_args.append("--ngrok")
+    if args.base_url:
+        serve_args += ["--base-url", args.base_url]
+    if args.no_auth:
+        serve_args.append("--no-auth")
+
+    return install_and_wait(serve_args, host=args.host, port=args.port,
+                             use_ngrok=args.ngrok, base_url=args.base_url, no_auth=args.no_auth)
 
 
 def _cmd_init(_args) -> int:
@@ -213,13 +285,14 @@ def main() -> None:
     p_list = sub.add_parser("list-projects", help="List registered projects.")
     p_list.set_defaults(func=_cmd_list_projects)
 
-    p_serve = sub.add_parser("serve", help="Run the MCP server.")
+    p_serve = sub.add_parser("serve", help="Install/start the MCP server as the background service (unless --foreground).")
     p_serve.add_argument("--transport", choices=["http", "stdio"], default="http")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8420)
     p_serve.add_argument("--base-url", default=None, help="Public URL this server is reachable at (e.g. your own domain/tunnel). Overridden automatically when --ngrok is used. Defaults to http://<host>:<port>.")
     p_serve.add_argument("--no-auth", action="store_true", help="Disable OAuth (local testing only — do not use with a public tunnel).")
     p_serve.add_argument("--ngrok", action="store_true", help="Expose the server publicly via ngrok. Requires 'claudeaibridge ngrok set-authtoken' first. Omit this if you're using your own domain/tunnel via --base-url instead.")
+    p_serve.add_argument("--foreground", action="store_true", help="Run directly in this terminal instead of installing/using the background service. Stops the background service first if one is running.")
     p_serve.set_defaults(func=_cmd_serve)
 
     p_ngrok = sub.add_parser("ngrok", help="Configure the ngrok tunnel.")
