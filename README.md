@@ -29,7 +29,11 @@ computer. The design leans hard on containment rather than trust:
 - **Filesystem containment.** Every file tool resolves and checks paths against the
   active project's root before touching disk; `../` traversal and symlink escapes are
   rejected. Shell commands run inside a sandbox (`bwrap` on Linux, `sandbox-exec` on
-  macOS) that makes the rest of the filesystem read-only.
+  macOS) that makes the rest of the filesystem read-only — this can be turned off with
+  `serve --no-sandbox` (see [Command reference](#claudeaibridge-serve)), but that's a
+  local, startup-time decision only. It's never a `shell_execute` argument, so nothing
+  in the conversation with claude.ai can ask for it — only you, typing the flag on this
+  machine, can disable it.
 - **Real OAuth consent.** Connecting isn't a rubber stamp — claude.ai has to complete
   an OAuth flow that opens a page on *this machine*, listing exactly which projects
   are registered, and a human has to click Approve. Nothing is granted silently.
@@ -143,6 +147,7 @@ it doesn't block your terminal. If the background service is already running,
 | `--host` / `--port` | Where the local server listens (default `127.0.0.1:8420`). |
 | `--transport stdio` | Talk over stdin/stdout instead of HTTP, for a local MCP client (e.g. Claude Desktop) on this same machine — no network, no tunnel, no OAuth, no background service either. |
 | `--foreground` | Run right here in this terminal instead of installing/using the background service — useful for watching logs live or quick debugging. If the background service is currently running, it's stopped first so the port is free. |
+| `--no-sandbox` | **Dangerous.** Disable filesystem sandboxing — `shell_execute` can then read/write anywhere this OS user can, not just the active project folder. See [How it's kept safe](#how-its-kept-safe). Prints a loud warning at startup. |
 
 Examples:
 
@@ -195,6 +200,7 @@ only builds for whatever platform you run it on.
 pip install -e '.[test]'
 python tests/smoke_test.py        # core MCP tools, in-memory
 python tests/oauth_flow_test.py   # full OAuth flow against a real subprocess
+python tests/no_sandbox_test.py   # confirms --no-sandbox genuinely disables containment
 python tests/tunnel_test.py       # live ngrok test — needs NGROK_AUTHTOKEN set
 ```
 

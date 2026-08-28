@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import tools_files, tools_projects, tools_shell
 
 
-def create_app(auth_provider=None) -> FastMCP:
+def create_app(auth_provider=None, no_sandbox: bool = False) -> FastMCP:
     """Build a fresh FastMCP instance with all tools registered. A factory
     rather than a module-level singleton because the auth provider (which
     needs the server's public base URL) is only known once `serve` picks a
@@ -28,7 +28,7 @@ def create_app(auth_provider=None) -> FastMCP:
     )
     tools_projects.register(mcp)
     tools_files.register(mcp)
-    tools_shell.register(mcp)
+    tools_shell.register(mcp, no_sandbox=no_sandbox)
     return mcp
 
 
@@ -36,10 +36,10 @@ def create_app(auth_provider=None) -> FastMCP:
 mcp = create_app()
 
 
-def run_http(host: str = "127.0.0.1", port: int = 8420, auth_provider=None) -> None:
+def run_http(host: str = "127.0.0.1", port: int = 8420, auth_provider=None, no_sandbox: bool = False) -> None:
     import uvicorn
 
-    app = create_app(auth_provider=auth_provider).http_app()
+    app = create_app(auth_provider=auth_provider, no_sandbox=no_sandbox).http_app()
     uvicorn.run(app, host=host, port=port)
 
 

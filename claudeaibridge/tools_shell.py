@@ -409,6 +409,12 @@ def _shutdown_jobs() -> None:
 
 atexit.register(_shutdown_jobs)
 
+# Set once at server startup via register(mcp, no_sandbox=...) -- deliberately
+# NOT a shell_execute parameter. The sandbox exists to protect this machine
+# from the remote model; a per-call toggle would let anything in the
+# conversation (including a prompt-injected one) just ask for it off.
+_sandbox_disabled = False
+
 
 async def _spawn(command: str, fout, ferr, root: str):
     common = dict(
@@ -417,7 +423,7 @@ async def _spawn(command: str, fout, ferr, root: str):
         stderr=ferr,
         start_new_session=True,
     )
-    if sandbox.sandbox_available():
+    if not _sandbox_disabled and sandbox.sandbox_available():
         return await asyncio.create_subprocess_exec(
             *sandbox.build_sandboxed_command(command, root), cwd=root, **common,
         )
@@ -454,7 +460,7 @@ def _close_stdin(proc) -> None:
 async def _run_command(command: str, timeout: int, root: str) -> dict:
     timeout = min(timeout, MAX_TIMEOUT_SECONDS)
     path_out, path_err, fout, ferr = _open_capture_files()
-    sandboxed = sandbox.sandbox_available()
+    sandboxed = not _sandbox_disabled and sandbox.sandbox_available()
 
     try:
         proc = await _spawn(command, fout, ferr, root)
@@ -532,7 +538,10 @@ async def _run_command(command: str, timeout: int, root: str) -> dict:
     }
 
 
-def register(mcp):
+def register(mcp, no_sandbox: bool = False):
+    global _sandbox_disabled
+    _sandbox_disabled = no_sandbox
+
     @mcp.tool(
         name="shell_execute",
         annotations={

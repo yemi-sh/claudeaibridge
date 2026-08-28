@@ -82,9 +82,13 @@ def _cmd_list_projects(_args) -> int:
     return 0
 
 
-def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], no_auth: bool) -> int:
+def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], no_auth: bool,
+                no_sandbox: bool = False) -> int:
     """Shared by `serve` and `init` (init gathers config interactively, then
-    ends by calling straight into this — same code path either way)."""
+    ends by calling straight into this — same code path either way). Caller
+    is responsible for the --no-sandbox warning, since this can be reached
+    either directly or as a fallback from install_and_wait — printing it
+    here too would show it twice on that fallback path."""
     from . import server
 
     listener = None
@@ -122,7 +126,7 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
     sys.stdout.flush()
 
     try:
-        server.run_http(host=host, port=port, auth_provider=auth_provider)
+        server.run_http(host=host, port=port, auth_provider=auth_provider, no_sandbox=no_sandbox)
     finally:
         if listener is not None:
             listener.close()
@@ -130,17 +134,26 @@ def run_server(host: str, port: int, use_ngrok: bool, base_url: Optional[str], n
 
 
 def install_and_wait(serve_args: list, *, host: str, port: int, use_ngrok: bool,
-                      base_url: Optional[str], no_auth: bool) -> int:
+                      base_url: Optional[str], no_auth: bool, no_sandbox: bool = False) -> int:
     """Install serve_args as the background service and report the connector
     URL once it comes up. Falls back to running in the foreground right here
     if the platform has no service manager. Shared by `init` and `serve`."""
     from . import service
 
+    if no_sandbox:
+        print(tc.error(
+            "WARNING: --no-sandbox is set. Shell commands will run WITHOUT "
+            "filesystem containment — they can read/write anywhere this OS "
+            "user can, not just the active project folder. Only use this if "
+            "you understand and accept that."
+        ))
+
     try:
         service_path = service.install(serve_args)
     except Exception as e:
         print(tc.hint(f"Could not run as a background service ({e}) — running in the foreground instead."))
-        return run_server(host=host, port=port, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth)
+        return run_server(host=host, port=port, use_ngrok=use_ngrok, base_url=base_url, no_auth=no_auth,
+                           no_sandbox=no_sandbox)
 
     print(tc.success(f"Installed and running in the background: {service_path}"))
     print("Waiting for it to come up...")
@@ -186,7 +199,15 @@ def _cmd_serve(args) -> int:
             print(tc.hint("Stopping the background service so this can run in the foreground..."))
             service.uninstall()
             registry.clear_connector_url()
-        return run_server(args.host, args.port, args.ngrok, args.base_url, args.no_auth)
+        if args.no_sandbox:
+            print(tc.error(
+                "WARNING: --no-sandbox is set. Shell commands will run WITHOUT "
+                "filesystem containment — they can read/write anywhere this OS "
+                "user can, not just the active project folder. Only use this if "
+                "you understand and accept that."
+            ))
+        return run_server(args.host, args.port, args.ngrok, args.base_url, args.no_auth,
+                           no_sandbox=args.no_sandbox)
 
     if active:
         print(tc.success("Background service already running."))
@@ -204,9 +225,12 @@ def _cmd_serve(args) -> int:
         serve_args += ["--base-url", args.base_url]
     if args.no_auth:
         serve_args.append("--no-auth")
+    if args.no_sandbox:
+        serve_args.append("--no-sandbox")
 
     return install_and_wait(serve_args, host=args.host, port=args.port,
-                             use_ngrok=args.ngrok, base_url=args.base_url, no_auth=args.no_auth)
+                             use_ngrok=args.ngrok, base_url=args.base_url, no_auth=args.no_auth,
+                             no_sandbox=args.no_sandbox)
 
 
 def _cmd_init(_args) -> int:
@@ -293,6 +317,7 @@ def main() -> None:
     p_serve.add_argument("--no-auth", action="store_true", help="Disable OAuth (local testing only — do not use with a public tunnel).")
     p_serve.add_argument("--ngrok", action="store_true", help="Expose the server publicly via ngrok. Requires 'claudeaibridge ngrok set-authtoken' first. Omit this if you're using your own domain/tunnel via --base-url instead.")
     p_serve.add_argument("--foreground", action="store_true", help="Run directly in this terminal instead of installing/using the background service. Stops the background service first if one is running.")
+    p_serve.add_argument("--no-sandbox", action="store_true", help="DANGEROUS: disable filesystem sandboxing for shell_execute. Commands can then read/write anywhere this OS user can, not just the active project folder. A local, startup-time decision only — never exposed as something the connected client can toggle.")
     p_serve.set_defaults(func=_cmd_serve)
 
     p_ngrok = sub.add_parser("ngrok", help="Configure the ngrok tunnel.")
