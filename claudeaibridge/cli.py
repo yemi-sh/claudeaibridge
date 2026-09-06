@@ -195,7 +195,13 @@ def _cmd_serve(args) -> int:
         active = None
 
     if args.foreground:
-        if active:
+        # Skip the self-check when this *is* the managed background process
+        # (systemd/launchd invoke `serve --foreground` to run it) -- systemd
+        # marks a freshly-started unit "active" the instant the process
+        # exists, so without this the process would see itself as "the
+        # already-running background service" and immediately uninstall
+        # itself.
+        if active and not service.is_managed_process():
             print(tc.hint("Stopping the background service so this can run in the foreground..."))
             service.uninstall()
             registry.clear_connector_url()

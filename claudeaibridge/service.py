@@ -17,6 +17,20 @@ from typing import List
 SERVICE_NAME = "claudeaibridge"
 LAUNCHD_LABEL = "com.claudeaibridge.serve"
 
+# Set in the service process's own environment so `_cmd_serve` can tell "I
+# was launched by systemd/launchd as the managed background service" apart
+# from "a human just typed `claudeaibridge serve --foreground` in a
+# terminal". Without this distinction, the managed process's own
+# self-check ("is the background service already active? if so, stop it
+# and run standalone") sees itself -- Type=simple/launchd mark a unit
+# active the instant the process starts, before it's done anything -- and
+# immediately uninstalls itself.
+MANAGED_ENV_VAR = "CLAUDEAIBRIDGE_MANAGED"
+
+
+def is_managed_process() -> bool:
+    return os.environ.get(MANAGED_ENV_VAR) == "1"
+
 
 def _env_overrides() -> dict:
     """Environment variables to carry into the service process. systemd/
@@ -53,7 +67,8 @@ def _systemd_unit_path() -> Path:
 
 def _install_linux(serve_args: List[str]) -> str:
     argv = _executable_argv() + ["serve", "--foreground"] + serve_args
-    env_lines = "".join(f"Environment={k}={v}\n" for k, v in _env_overrides().items())
+    env = {**_env_overrides(), MANAGED_ENV_VAR: "1"}
+    env_lines = "".join(f"Environment={k}={v}\n" for k, v in env.items())
     unit = f"""[Unit]
 Description=claudeaibridge - claude.ai coding agent bridge
 After=network-online.target
@@ -103,11 +118,9 @@ def _install_macos(serve_args: List[str]) -> str:
     log_path = Path.home() / "Library" / "Logs" / "claudeaibridge.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     args_xml = "\n".join(f"        <string>{a}</string>" for a in argv)
-    env_overrides = _env_overrides()
-    env_xml = ""
-    if env_overrides:
-        entries = "\n".join(f"        <key>{k}</key><string>{v}</string>" for k, v in env_overrides.items())
-        env_xml = f"    <key>EnvironmentVariables</key>\n    <dict>\n{entries}\n    </dict>\n"
+    env_overrides = {**_env_overrides(), MANAGED_ENV_VAR: "1"}
+    entries = "\n".join(f"        <key>{k}</key><string>{v}</string>" for k, v in env_overrides.items())
+    env_xml = f"    <key>EnvironmentVariables</key>\n    <dict>\n{entries}\n    </dict>\n"
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
